@@ -199,8 +199,8 @@
               <td class="dim">{new Date(user.createdAt).toLocaleDateString('id-ID')}</td>
               <td>
                 <div class="action-btns">
-                  <button class="btn btn-ghost btn-icon" title="Edit" onclick={() => openEdit(user)}>✏️</button>
-                  <button class="btn btn-ghost btn-icon" title="Delete" onclick={() => openDelete(user)}>🗑</button>
+                  <button class="btn btn-ghost btn-icon" style="width: auto" title="Edit" onclick={() => openEdit(user)}>Edit</button>
+                  <button class="btn btn-ghost btn-icon" style="width: auto" title="Delete" onclick={() => openDelete(user)}>Del</button>
                 </div>
               </td>
             </tr>

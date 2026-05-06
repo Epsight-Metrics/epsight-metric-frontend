@@ -120,14 +120,18 @@
   <!-- KPI Cards -->
   <div class="kpi-grid">
     <div class="kpi-card">
-      <div class="kpi-icon">📦</div>
+      <div class="kpi-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+      </div>
       <div class="kpi-info">
         <span class="kpi-value">{kpi.totalInspected}</span>
         <span class="kpi-label">{$t('manager.total_inspected')}</span>
       </div>
     </div>
     <div class="kpi-card kpi-ok">
-      <div class="kpi-icon">✅</div>
+      <div class="kpi-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--clr-ok)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      </div>
       <div class="kpi-info">
         <span class="kpi-value">{kpi.okRate}%</span>
         <span class="kpi-label">{$t('manager.ok_rate')}</span>
@@ -135,7 +139,9 @@
       </div>
     </div>
     <div class="kpi-card kpi-ng">
-      <div class="kpi-icon">❌</div>
+      <div class="kpi-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--clr-ng)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+      </div>
       <div class="kpi-info">
         <span class="kpi-value">{kpi.ngRate}%</span>
         <span class="kpi-label">{$t('manager.ng_rate')}</span>
@@ -143,7 +149,9 @@
       </div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-icon">⚡</div>
+      <div class="kpi-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      </div>
       <div class="kpi-info">
         <span class="kpi-value">{kpi.throughput}</span>
         <span class="kpi-label">{$t('manager.throughput')}</span>

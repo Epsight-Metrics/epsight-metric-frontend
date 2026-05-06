@@ -72,7 +72,7 @@
       💾 Simpan Konfigurasi
     </button>
     {#if saved}
-      <span class="saved-msg animate-fade-in">✅ Tersimpan!</span>
+      <span class="saved-msg animate-fade-in">Tersimpan!</span>
     {/if}
   </div>
 </div>

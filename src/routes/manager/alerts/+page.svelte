@@ -67,7 +67,9 @@
     {/each}
     {#if alerts.length === 0}
       <div class="no-alerts">
-        <span class="no-alerts-icon">✅</span>
+        <span class="no-alerts-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--clr-ok)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        </span>
         <p>Tidak ada peringatan NG</p>
       </div>
     {/if}

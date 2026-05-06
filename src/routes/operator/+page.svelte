@@ -295,7 +295,13 @@
           </div>
 
           <div class="status-card animate-fade-in" class:ok={resultStatus === 'OK'} class:ng={resultStatus === 'NG'}>
-            <span class="status-icon">{resultStatus === 'OK' ? '✅' : '❌'}</span>
+            <span class="status-icon">
+              {#if resultStatus === 'OK'}
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--clr-ok)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              {:else}
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--clr-ng)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              {/if}
+            </span>
             <span class="status-text">STATUS: {resultStatus}</span>
           </div>
         {:else if !inspecting}
