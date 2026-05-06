@@ -1,0 +1,552 @@
+<script>
+  import { t } from '$lib/i18n.js';
+
+  // Inspection state
+  let inspecting = $state(false);
+  let hasResult = $state(false);
+  let resultStatus = $state(''); // 'OK' or 'NG'
+  let showNgOverlay = $state(false);
+
+  // Mock measurement results
+  let measurements = $state({ length: 0, width: 0, diameter: 0 });
+  let partId = $state('GEAR-A01');
+  let sessionCount = $state(42);
+  let cameraConnected = $state(true);
+  let todayInspected = $state(127);
+  let todayNg = $state(3);
+
+  // Session history (last 5)
+  let sessionHistory = $state([
+    { id: '#041', part: 'GEAR-A01', status: 'OK', time: '10:32' },
+    { id: '#040', part: 'BOLT-B12', status: 'NG', time: '10:31' },
+    { id: '#039', part: 'GEAR-A01', status: 'OK', time: '10:29' },
+    { id: '#038', part: 'SHAFT-C05', status: 'OK', time: '10:27' },
+    { id: '#037', part: 'GEAR-A02', status: 'OK', time: '10:25' },
+  ]);
+
+  async function startInspection() {
+    if (inspecting) return;
+    inspecting = true;
+    hasResult = false;
+
+    // Simulate processing delay (< 2 seconds)
+    await new Promise(r => setTimeout(r, 1200 + Math.random() * 600));
+
+    // Random result for demo
+    const isOk = Math.random() > 0.2;
+    measurements = {
+      length: +(12 + Math.random() * 0.5).toFixed(2),
+      width: +(8 + Math.random() * 0.3).toFixed(2),
+      diameter: +(5 + Math.random() * 0.1).toFixed(2),
+    };
+
+    resultStatus = isOk ? 'OK' : 'NG';
+    hasResult = true;
+    inspecting = false;
+    sessionCount++;
+    todayInspected++;
+
+    if (!isOk) {
+      todayNg++;
+      showNgOverlay = true;
+      playAlarm();
+    }
+
+    // Add to session history
+    const now = new Date();
+    const time = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+    sessionHistory = [
+      { id: `#${String(sessionCount).padStart(3,'0')}`, part: partId, status: resultStatus, time },
+      ...sessionHistory.slice(0, 4)
+    ];
+  }
+
+  function playAlarm() {
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 800;
+      osc.type = 'square';
+      gain.gain.value = 0.3;
+      osc.start();
+      setTimeout(() => { osc.stop(); ctx.close(); }, 1500);
+    } catch (e) { /* Audio not supported */ }
+  }
+
+  function confirmNgAndContinue() {
+    showNgOverlay = false;
+    resultStatus = '';
+    hasResult = false;
+  }
+</script>
+
+<svelte:head>
+  <title>{$t('operator.live_camera')} — EPSON QC</title>
+</svelte:head>
+
+<!-- NG Full-screen overlay -->
+{#if showNgOverlay}
+  <div class="ng-overlay animate-fade-in">
+    <div class="ng-content">
+      <div class="ng-header-bar">{$t('operator.ng_alert_title')}</div>
+      <div class="ng-body">
+        <div class="ng-big-text">NG</div>
+        <p class="ng-alarm">{$t('operator.ng_alarm')}</p>
+
+        <div class="sop-box">
+          <p class="sop-title">{$t('operator.sop_title')}</p>
+          <p>{$t('operator.sop_1')}</p>
+          <p>{$t('operator.sop_2')}</p>
+          <p>{$t('operator.sop_3')}</p>
+          <p>{$t('operator.sop_4')}</p>
+        </div>
+
+        <button class="btn btn-primary btn-lg confirm-btn" onclick={confirmNgAndContinue}>
+          {$t('operator.confirm_next')}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<div class="operator-page">
+  <!-- Main Content -->
+  <div class="inspect-grid">
+    <!-- Left: Camera Feed -->
+    <div class="camera-section">
+      <div class="section-label">{$t('operator.live_camera')}</div>
+      <div class="camera-feed">
+        <div class="camera-placeholder">
+          <div class="camera-circle"></div>
+          <div class="crosshair h"></div>
+          <div class="crosshair v"></div>
+          <div class="corner tl"></div>
+          <div class="corner tr"></div>
+          <div class="corner bl"></div>
+          <div class="corner br"></div>
+          {#if !inspecting && !hasResult}
+            <p class="camera-hint">{$t('operator.align_part')}</p>
+          {/if}
+          {#if inspecting}
+            <div class="scan-line"></div>
+          {/if}
+        </div>
+        <div class="camera-badge" class:connected={cameraConnected}>
+          <span class="dot"></span>
+          {cameraConnected ? $t('operator.camera_connected') : $t('operator.camera_disconnected')}
+        </div>
+      </div>
+
+      <!-- Inspect Button -->
+      <button
+        class="inspect-btn"
+        class:inspecting
+        onclick={startInspection}
+        disabled={inspecting}
+      >
+        {#if inspecting}
+          <span class="spinner"></span> {$t('operator.inspecting')}
+        {:else}
+          {$t('operator.inspect_btn')}
+        {/if}
+      </button>
+    </div>
+
+    <!-- Right: Results + History -->
+    <div class="results-section">
+      <div class="section-label">{$t('operator.result')}</div>
+
+      {#if hasResult}
+        <div class="measurements animate-fade-in">
+          <div class="measure-row">
+            <span class="measure-label">{$t('operator.length')}</span>
+            <span class="measure-value">{measurements.length} mm</span>
+            <span class="measure-check">✓</span>
+          </div>
+          <div class="measure-row">
+            <span class="measure-label">{$t('operator.width')}</span>
+            <span class="measure-value">{measurements.width} mm</span>
+            <span class="measure-check">✓</span>
+          </div>
+          <div class="measure-row">
+            <span class="measure-label">{$t('operator.diameter')}</span>
+            <span class="measure-value">{measurements.diameter} mm</span>
+            <span class="measure-check">✓</span>
+          </div>
+        </div>
+
+        <div class="status-card animate-fade-in" class:ok={resultStatus === 'OK'} class:ng={resultStatus === 'NG'}>
+          <span class="status-icon">{resultStatus === 'OK' ? '✅' : '❌'}</span>
+          <span class="status-text">STATUS: {resultStatus}</span>
+        </div>
+      {:else if !inspecting}
+        <div class="no-result">
+          <span class="no-result-icon">📷</span>
+          <p>{$t('operator.waiting')}</p>
+        </div>
+      {/if}
+
+      <!-- Session History -->
+      <div class="history-section">
+        <div class="section-label">{$t('operator.session_history')} (5)</div>
+        <div class="history-list">
+          {#each sessionHistory as item}
+            <div class="history-row">
+              <span class="history-id">{item.id}</span>
+              <span class="history-part">{item.part}</span>
+              <span class="badge" class:badge-ok={item.status === 'OK'} class:badge-ng={item.status === 'NG'}>
+                {item.status}
+              </span>
+              <span class="history-time">{item.time}</span>
+            </div>
+          {/each}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <span class="status-item">
+      <span class="dot" class:connected={cameraConnected}></span>
+      {cameraConnected ? $t('operator.camera_connected') : $t('operator.camera_disconnected')}
+    </span>
+    <span class="status-item">{$t('operator.inspected_today')}: <strong>{todayInspected}</strong></span>
+    <span class="status-item">NG: <strong>{todayNg}</strong> ({todayInspected > 0 ? ((todayNg/todayInspected)*100).toFixed(1) : 0}%)</span>
+    <span class="status-item">Part: <strong>{partId}</strong></span>
+    <span class="status-item">Session: <strong>#{String(sessionCount).padStart(3,'0')}</strong></span>
+  </div>
+</div>
+
+<style>
+  .operator-page {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .inspect-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-4);
+    padding: var(--sp-4);
+  }
+  .section-label {
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    color: var(--clr-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: var(--sp-3);
+  }
+
+  /* Camera */
+  .camera-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+  .camera-feed { position: relative; }
+  .camera-placeholder {
+    aspect-ratio: 4/3;
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-lg);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+      radial-gradient(circle at center, rgba(99,102,241,0.05) 0%, transparent 70%),
+      var(--clr-surface);
+  }
+  .camera-circle {
+    width: 120px;
+    height: 120px;
+    border: 2px dashed var(--clr-border-light);
+    border-radius: 50%;
+    animation: pulse 3s infinite;
+  }
+  .crosshair {
+    position: absolute;
+    background: rgba(99,102,241,0.3);
+  }
+  .crosshair.h { width: 100%; height: 1px; top: 50%; }
+  .crosshair.v { width: 1px; height: 100%; left: 50%; }
+  .corner {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-color: var(--clr-accent);
+    border-style: solid;
+  }
+  .corner.tl { top: 12px; left: 12px; border-width: 2px 0 0 2px; }
+  .corner.tr { top: 12px; right: 12px; border-width: 2px 2px 0 0; }
+  .corner.bl { bottom: 12px; left: 12px; border-width: 0 0 2px 2px; }
+  .corner.br { bottom: 12px; right: 12px; border-width: 0 2px 2px 0; }
+  .camera-hint {
+    position: absolute;
+    bottom: 16px;
+    font-size: var(--fs-sm);
+    color: var(--clr-text-dim);
+  }
+  .scan-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--clr-accent), transparent);
+    animation: scanDown 1.5s ease-in-out infinite;
+  }
+  @keyframes scanDown {
+    0% { top: 0; }
+    50% { top: 100%; }
+    100% { top: 0; }
+  }
+  .camera-badge {
+    position: absolute;
+    top: var(--sp-3);
+    right: var(--sp-3);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    padding: 2px var(--sp-2);
+    background: var(--clr-surface-2);
+    border-radius: var(--radius-full);
+    font-size: var(--fs-xs);
+    color: var(--clr-text-muted);
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--clr-ng);
+  }
+  .dot.connected, .camera-badge.connected .dot {
+    background: var(--clr-ok);
+    box-shadow: 0 0 6px var(--clr-ok);
+  }
+
+  /* Inspect Button */
+  .inspect-btn {
+    padding: var(--sp-4) var(--sp-6);
+    font-family: var(--font-family);
+    font-size: var(--fs-xl);
+    font-weight: var(--fw-bold);
+    color: #fff;
+    background: linear-gradient(135deg, var(--clr-accent), #7c3aed);
+    border: none;
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all var(--transition-base);
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-3);
+  }
+  .inspect-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-glow-accent);
+  }
+  .inspect-btn:disabled {
+    opacity: 0.7;
+    cursor: wait;
+  }
+  .inspect-btn.inspecting {
+    background: linear-gradient(135deg, #4338ca, #6d28d9);
+  }
+  .spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Results */
+  .results-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+  .measurements {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+  }
+  .measure-row {
+    display: flex;
+    align-items: center;
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    gap: var(--sp-3);
+  }
+  .measure-label {
+    flex: 1;
+    font-size: var(--fs-sm);
+    color: var(--clr-text-muted);
+  }
+  .measure-value {
+    font-size: var(--fs-lg);
+    font-weight: var(--fw-semibold);
+    font-variant-numeric: tabular-nums;
+  }
+  .measure-check {
+    color: var(--clr-ok);
+    font-size: var(--fs-lg);
+  }
+
+  /* Status Card */
+  .status-card {
+    padding: var(--sp-6);
+    border-radius: var(--radius-lg);
+    text-align: center;
+    font-size: var(--fs-2xl);
+    font-weight: var(--fw-bold);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-3);
+    letter-spacing: 2px;
+  }
+  .status-card.ok {
+    background: var(--clr-ok-bg);
+    color: var(--clr-ok);
+    border: 2px solid rgba(34,197,94,0.3);
+    box-shadow: var(--shadow-glow-ok);
+  }
+  .status-card.ng {
+    background: var(--clr-ng-bg);
+    color: var(--clr-ng);
+    border: 2px solid rgba(239,68,68,0.3);
+    box-shadow: var(--shadow-glow-ng);
+    animation: blink 1s ease infinite;
+  }
+  .status-icon { font-size: var(--fs-3xl); }
+
+  .no-result {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-12);
+    color: var(--clr-text-dim);
+    gap: var(--sp-3);
+  }
+  .no-result-icon { font-size: 3rem; opacity: 0.5; }
+
+  /* History */
+  .history-section {
+    margin-top: auto;
+  }
+  .history-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+  }
+  .history-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-sm);
+  }
+  .history-id {
+    font-weight: var(--fw-semibold);
+    color: var(--clr-text-muted);
+    min-width: 40px;
+  }
+  .history-part { flex: 1; }
+  .history-time { color: var(--clr-text-dim); font-size: var(--fs-xs); }
+
+  /* Status Bar */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-6);
+    padding: var(--sp-3) var(--sp-6);
+    background: var(--clr-surface);
+    border-top: 1px solid var(--clr-border);
+    font-size: var(--fs-xs);
+    color: var(--clr-text-muted);
+  }
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+
+  /* NG Overlay */
+  .ng-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(239,68,68,0.95);
+  }
+  .ng-content {
+    max-width: 600px;
+    width: 90%;
+    text-align: center;
+  }
+  .ng-header-bar {
+    font-size: var(--fs-2xl);
+    font-weight: var(--fw-bold);
+    color: #fff;
+    margin-bottom: var(--sp-6);
+    letter-spacing: 2px;
+  }
+  .ng-body { color: #fff; }
+  .ng-big-text {
+    font-size: 6rem;
+    font-weight: var(--fw-bold);
+    letter-spacing: 16px;
+    animation: blink 0.8s ease infinite;
+    margin-bottom: var(--sp-4);
+    text-shadow: 0 0 40px rgba(255,255,255,0.5);
+  }
+  .ng-alarm {
+    font-size: var(--fs-lg);
+    margin-bottom: var(--sp-6);
+    opacity: 0.9;
+  }
+  .sop-box {
+    text-align: left;
+    background: rgba(0,0,0,0.2);
+    padding: var(--sp-5);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--sp-6);
+    line-height: 2;
+  }
+  .sop-title {
+    font-weight: var(--fw-semibold);
+    margin-bottom: var(--sp-2);
+    font-size: var(--fs-md);
+  }
+  .confirm-btn {
+    background: #fff;
+    color: var(--clr-ng);
+    border: none;
+    font-size: var(--fs-md);
+    padding: var(--sp-4) var(--sp-8);
+  }
+  .confirm-btn:hover {
+    background: #f0f0f0;
+    box-shadow: none;
+  }
+</style>
