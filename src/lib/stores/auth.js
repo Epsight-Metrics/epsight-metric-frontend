@@ -1,78 +1,84 @@
-// Auth store — hardcoded users, ready for Express.js integration
+// Auth store — JWT-based authentication against Express.js backend
 import { writable, derived } from 'svelte/store';
-
-// Hardcoded users for development
-const MOCK_USERS = [
-  { id: 1, username: 'operator1', password: 'pass123', fullname: 'Hadi Santoso', role: 'operator', active: true },
-  { id: 2, username: 'admin1', password: 'pass123', fullname: 'Rina Wijaya', role: 'admin', active: true },
-  { id: 3, username: 'manager1', password: 'pass123', fullname: 'Siti Nurhaliza', role: 'manager', active: true },
-  { id: 4, username: 'auditor1', password: 'pass123', fullname: 'Budi Prasetyo', role: 'auditor', active: true },
-];
+import { login as apiLogin } from '$lib/api/auth.js';
+import { toFrontendRole } from '$lib/utils/roles.js';
 
 function createAuthStore() {
   const { subscribe, set, update } = writable({
     user: null,
     isAuthenticated: false,
     loading: false,
-    error: null
+    error: null,
   });
 
   return {
     subscribe,
 
     /**
-     * Login with username/password.
-     * TODO: Replace with fetch to Express.js backend:
-     *   const res = await fetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });
+     * Login with username/password via backend API.
      */
     login: async (username, password) => {
-      update(s => ({ ...s, loading: true, error: null }));
+      update((s) => ({ ...s, loading: true, error: null }));
 
-      // Simulate API delay
-      await new Promise(r => setTimeout(r, 800));
+      try {
+        const { token, user } = await apiLogin(username, password);
 
-      const user = MOCK_USERS.find(u => u.username === username && u.password === password && u.active);
+        // Map backend user shape to frontend shape
+        const mappedUser = {
+          id: user.id,
+          username: user.username,
+          fullname: user.name,
+          role: toFrontendRole(user.role),
+          backendRole: user.role,
+        };
 
-      if (user) {
-        const { password: _, ...safeUser } = user;
-        set({ user: safeUser, isAuthenticated: true, loading: false, error: null });
-        // TODO: Store session token from Express.js response
         if (typeof localStorage !== 'undefined') {
-          localStorage.setItem('srs_user', JSON.stringify(safeUser));
+          localStorage.setItem('srs_token', token);
+          localStorage.setItem('srs_user', JSON.stringify(mappedUser));
         }
-        return safeUser;
-      } else {
-        set({ user: null, isAuthenticated: false, loading: false, error: 'Username atau kata sandi salah' });
+
+        set({ user: mappedUser, isAuthenticated: true, loading: false, error: null });
+        return mappedUser;
+      } catch (err) {
+        let message;
+        if (err.status === 429) {
+          message = 'Terlalu banyak percobaan. Coba lagi dalam 15 menit.';
+        } else if (err.status === 401) {
+          message = 'Username atau kata sandi salah';
+        } else {
+          message = err.message || 'Terjadi kesalahan';
+        }
+        set({ user: null, isAuthenticated: false, loading: false, error: message });
         return null;
       }
     },
 
     /**
-     * Logout user.
-     * TODO: Replace with fetch to Express.js backend:
-     *   await fetch('/api/auth/logout', { method: 'POST' });
+     * Logout — clear token and user from storage.
      */
     logout: () => {
       set({ user: null, isAuthenticated: false, loading: false, error: null });
       if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('srs_token');
         localStorage.removeItem('srs_user');
       }
     },
 
     /**
      * Restore session from localStorage.
-     * TODO: Replace with session validation against Express.js:
-     *   const res = await fetch('/api/auth/me');
+     * Token validation happens implicitly on the next API call (401 → redirect).
      */
     restore: () => {
       if (typeof localStorage !== 'undefined') {
+        const token = localStorage.getItem('srs_token');
         const stored = localStorage.getItem('srs_user');
-        if (stored) {
+        if (token && stored) {
           try {
             const user = JSON.parse(stored);
             set({ user, isAuthenticated: true, loading: false, error: null });
             return user;
           } catch {
+            localStorage.removeItem('srs_token');
             localStorage.removeItem('srs_user');
           }
         }
@@ -81,14 +87,14 @@ function createAuthStore() {
     },
 
     clearError: () => {
-      update(s => ({ ...s, error: null }));
-    }
+      update((s) => ({ ...s, error: null }));
+    },
   };
 }
 
 export const auth = createAuthStore();
 
 // Derived stores for convenience
-export const currentUser = derived(auth, $auth => $auth.user);
-export const isAuthenticated = derived(auth, $auth => $auth.isAuthenticated);
-export const userRole = derived(auth, $auth => $auth.user?.role || null);
+export const currentUser = derived(auth, ($auth) => $auth.user);
+export const isAuthenticated = derived(auth, ($auth) => $auth.isAuthenticated);
+export const userRole = derived(auth, ($auth) => $auth.user?.role || null);

@@ -1,64 +1,144 @@
 <script>
   import { t } from '$lib/i18n.js';
+  import { onMount, onDestroy } from 'svelte';
+  import { getSession, startSession, stopSession, submitInspection, getParts } from '$lib/api/operator.js';
+
+  // Session state
+  let activeSession = $state(null);
+  let sessionLoading = $state(false);
 
   // Inspection state
   let inspecting = $state(false);
   let hasResult = $state(false);
-  let resultStatus = $state(''); // 'OK' or 'NG'
+  let resultStatus = $state('');
   let showNgOverlay = $state(false);
 
-  // Mock measurement results
-  let measurements = $state({ length: 0, width: 0, diameter: 0 });
-  let partId = $state('GEAR-A01');
-  let sessionCount = $state(42);
+  // Data
+  let measurements = $state({});
+  let selectedPartId = $state(null);
+  let parts = $state([]);
+  let recentInspections = $state([]);
   let cameraConnected = $state(true);
-  let todayInspected = $state(127);
-  let todayNg = $state(3);
+  let todayInspected = $state(0);
+  let todayNg = $state(0);
 
-  // Session history (last 5)
-  let sessionHistory = $state([
-    { id: '#041', part: 'GEAR-A01', status: 'OK', time: '10:32' },
-    { id: '#040', part: 'BOLT-B12', status: 'NG', time: '10:31' },
-    { id: '#039', part: 'GEAR-A01', status: 'OK', time: '10:29' },
-    { id: '#038', part: 'SHAFT-C05', status: 'OK', time: '10:27' },
-    { id: '#037', part: 'GEAR-A02', status: 'OK', time: '10:25' },
-  ]);
+  // Loading & error
+  let pageLoading = $state(true);
+  let error = $state('');
+
+  async function loadInitialData() {
+    pageLoading = true;
+    error = '';
+    try {
+      const [sessionData, partsData] = await Promise.all([
+        getSession(),
+        getParts(),
+      ]);
+
+      parts = partsData || [];
+      if (parts.length > 0 && !selectedPartId) {
+        selectedPartId = parts[0].id;
+      }
+
+      activeSession = sessionData.activeSession || null;
+      recentInspections = (sessionData.recent || []).map(mapInspection);
+
+      // Count today's stats from recent inspections
+      const today = new Date().toDateString();
+      const todayItems = (sessionData.recent || []).filter(
+        (r) => new Date(r.timestamp).toDateString() === today
+      );
+      todayInspected = todayItems.length;
+      todayNg = todayItems.filter((r) => r.status === 'NG' || r.status === 'NO GOOD').length;
+    } catch (err) {
+      error = err.message;
+    } finally {
+      pageLoading = false;
+    }
+  }
+
+  function mapInspection(item) {
+    const dims = item.nilaiDimensi || {};
+    return {
+      id: item.id,
+      part: item.part?.partCode || item.idPart || '-',
+      partName: item.part?.partName || '-',
+      status: item.status === 'GOOD' ? 'OK' : item.status === 'NO GOOD' ? 'NG' : item.status,
+      time: new Date(item.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+      dimensions: dims,
+    };
+  }
+
+  async function handleStartSession() {
+    sessionLoading = true;
+    error = '';
+    try {
+      const session = await startSession();
+      activeSession = session;
+    } catch (err) {
+      error = err.message;
+    } finally {
+      sessionLoading = false;
+    }
+  }
+
+  async function handleStopSession() {
+    if (!activeSession) return;
+    sessionLoading = true;
+    error = '';
+    try {
+      await stopSession(activeSession.sessionId);
+      activeSession = null;
+    } catch (err) {
+      error = err.message;
+    } finally {
+      sessionLoading = false;
+    }
+  }
 
   async function startInspection() {
-    if (inspecting) return;
+    if (inspecting || !selectedPartId) return;
     inspecting = true;
     hasResult = false;
+    error = '';
 
-    // Simulate processing delay (< 2 seconds)
-    await new Promise(r => setTimeout(r, 1200 + Math.random() * 600));
+    // Simulate CV processing delay (camera capture + measurement)
+    await new Promise((r) => setTimeout(r, 1200 + Math.random() * 600));
 
-    // Random result for demo
+    // Demo: random result — in production, CV system calls /api/operator/inspect/cv
     const isOk = Math.random() > 0.2;
-    measurements = {
+    const dims = {
       length: +(12 + Math.random() * 0.5).toFixed(2),
       width: +(8 + Math.random() * 0.3).toFixed(2),
       diameter: +(5 + Math.random() * 0.1).toFixed(2),
     };
 
-    resultStatus = isOk ? 'OK' : 'NG';
-    hasResult = true;
-    inspecting = false;
-    sessionCount++;
-    todayInspected++;
+    try {
+      const result = await submitInspection({
+        partId: selectedPartId,
+        sessionId: activeSession?.sessionId || undefined,
+        status: isOk ? 'OK' : 'NG',
+        nilaiDimensi: dims,
+      });
 
-    if (!isOk) {
-      todayNg++;
-      showNgOverlay = true;
-      playAlarm();
+      const mapped = mapInspection(result);
+      measurements = dims;
+      resultStatus = mapped.status;
+      hasResult = true;
+      todayInspected++;
+
+      recentInspections = [mapped, ...recentInspections.slice(0, 4)];
+
+      if (resultStatus === 'NG') {
+        todayNg++;
+        showNgOverlay = true;
+        playAlarm();
+      }
+    } catch (err) {
+      error = err.message;
+    } finally {
+      inspecting = false;
     }
-
-    // Add to session history
-    const now = new Date();
-    const time = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-    sessionHistory = [
-      { id: `#${String(sessionCount).padStart(3,'0')}`, part: partId, status: resultStatus, time },
-      ...sessionHistory.slice(0, 4)
-    ];
   }
 
   function playAlarm() {
@@ -81,6 +161,15 @@
     resultStatus = '';
     hasResult = false;
   }
+
+  function getSelectedPartCode() {
+    const p = parts.find((p) => p.id === selectedPartId);
+    return p?.partCode || '-';
+  }
+
+  onMount(() => {
+    loadInitialData();
+  });
 </script>
 
 <svelte:head>
@@ -112,116 +201,217 @@
   </div>
 {/if}
 
-<div class="operator-page">
-  <!-- Main Content -->
-  <div class="inspect-grid">
-    <!-- Left: Camera Feed -->
-    <div class="camera-section">
-      <div class="section-label">{$t('operator.live_camera')}</div>
-      <div class="camera-feed">
-        <div class="camera-placeholder">
-          <div class="camera-circle"></div>
-          <div class="crosshair h"></div>
-          <div class="crosshair v"></div>
-          <div class="corner tl"></div>
-          <div class="corner tr"></div>
-          <div class="corner bl"></div>
-          <div class="corner br"></div>
-          {#if !inspecting && !hasResult}
-            <p class="camera-hint">{$t('operator.align_part')}</p>
-          {/if}
-          {#if inspecting}
-            <div class="scan-line"></div>
-          {/if}
-        </div>
-        <div class="camera-badge" class:connected={cameraConnected}>
-          <span class="dot"></span>
-          {cameraConnected ? $t('operator.camera_connected') : $t('operator.camera_disconnected')}
-        </div>
-      </div>
+{#if pageLoading}
+  <div class="loading-page">
+    <span class="spinner-lg"></span>
+    <p>{$t('common.loading')}</p>
+  </div>
+{:else}
+  <div class="operator-page">
+    {#if error}
+      <div class="error-banner">{error}</div>
+    {/if}
 
-      <!-- Inspect Button -->
-      <button
-        class="inspect-btn"
-        class:inspecting
-        onclick={startInspection}
-        disabled={inspecting}
-      >
-        {#if inspecting}
-          <span class="spinner"></span> {$t('operator.inspecting')}
+    <!-- Session Control Bar -->
+    <div class="session-bar">
+      <div class="session-info">
+        {#if activeSession}
+          <span class="session-badge active">● Sesi Aktif: <strong>{activeSession.sessionId}</strong></span>
+          <button class="btn btn-secondary" onclick={handleStopSession} disabled={sessionLoading}>
+            {$t('operator.stop_session')}
+          </button>
         {:else}
-          {$t('operator.inspect_btn')}
+          <span class="session-badge inactive">○ {$t('operator.no_session')}</span>
+          <button class="btn btn-primary" onclick={handleStartSession} disabled={sessionLoading}>
+            {$t('operator.start_session')}
+          </button>
         {/if}
-      </button>
+      </div>
+      <div class="part-selector">
+        <label class="label" for="partSelect">{$t('operator.select_part')}</label>
+        <select id="partSelect" class="select" bind:value={selectedPartId}>
+          {#each parts as part}
+            <option value={part.id}>{part.partCode} — {part.partName}</option>
+          {/each}
+        </select>
+      </div>
     </div>
 
-    <!-- Right: Results + History -->
-    <div class="results-section">
-      <div class="section-label">{$t('operator.result')}</div>
-
-      {#if hasResult}
-        <div class="measurements animate-fade-in">
-          <div class="measure-row">
-            <span class="measure-label">{$t('operator.length')}</span>
-            <span class="measure-value">{measurements.length} mm</span>
-            <span class="measure-check">✓</span>
+    <!-- Main Content -->
+    <div class="inspect-grid">
+      <!-- Left: Camera Feed -->
+      <div class="camera-section">
+        <div class="section-label">{$t('operator.live_camera')}</div>
+        <div class="camera-feed">
+          <div class="camera-placeholder">
+            <div class="camera-circle"></div>
+            <div class="crosshair h"></div>
+            <div class="crosshair v"></div>
+            <div class="corner tl"></div>
+            <div class="corner tr"></div>
+            <div class="corner bl"></div>
+            <div class="corner br"></div>
+            {#if !inspecting && !hasResult}
+              <p class="camera-hint">{$t('operator.align_part')}</p>
+            {/if}
+            {#if inspecting}
+              <div class="scan-line"></div>
+            {/if}
           </div>
-          <div class="measure-row">
-            <span class="measure-label">{$t('operator.width')}</span>
-            <span class="measure-value">{measurements.width} mm</span>
-            <span class="measure-check">✓</span>
-          </div>
-          <div class="measure-row">
-            <span class="measure-label">{$t('operator.diameter')}</span>
-            <span class="measure-value">{measurements.diameter} mm</span>
-            <span class="measure-check">✓</span>
+          <div class="camera-badge" class:connected={cameraConnected}>
+            <span class="dot"></span>
+            {cameraConnected ? $t('operator.camera_connected') : $t('operator.camera_disconnected')}
           </div>
         </div>
 
-        <div class="status-card animate-fade-in" class:ok={resultStatus === 'OK'} class:ng={resultStatus === 'NG'}>
-          <span class="status-icon">{resultStatus === 'OK' ? '✅' : '❌'}</span>
-          <span class="status-text">STATUS: {resultStatus}</span>
-        </div>
-      {:else if !inspecting}
-        <div class="no-result">
-          <span class="no-result-icon">📷</span>
-          <p>{$t('operator.waiting')}</p>
-        </div>
-      {/if}
+        <!-- Inspect Button -->
+        <button
+          class="inspect-btn"
+          class:inspecting
+          onclick={startInspection}
+          disabled={inspecting || !selectedPartId}
+        >
+          {#if inspecting}
+            <span class="spinner"></span> {$t('operator.inspecting')}
+          {:else}
+            {$t('operator.inspect_btn')}
+          {/if}
+        </button>
+      </div>
 
-      <!-- Session History -->
-      <div class="history-section">
-        <div class="section-label">{$t('operator.session_history')} (5)</div>
-        <div class="history-list">
-          {#each sessionHistory as item}
-            <div class="history-row">
-              <span class="history-id">{item.id}</span>
-              <span class="history-part">{item.part}</span>
-              <span class="badge" class:badge-ok={item.status === 'OK'} class:badge-ng={item.status === 'NG'}>
-                {item.status}
-              </span>
-              <span class="history-time">{item.time}</span>
-            </div>
-          {/each}
+      <!-- Right: Results + History -->
+      <div class="results-section">
+        <div class="section-label">{$t('operator.result')}</div>
+
+        {#if hasResult}
+          <div class="measurements animate-fade-in">
+            {#each Object.entries(measurements) as [key, val]}
+              <div class="measure-row">
+                <span class="measure-label">{key}</span>
+                <span class="measure-value">{val} mm</span>
+                <span class="measure-check">✓</span>
+              </div>
+            {/each}
+          </div>
+
+          <div class="status-card animate-fade-in" class:ok={resultStatus === 'OK'} class:ng={resultStatus === 'NG'}>
+            <span class="status-icon">{resultStatus === 'OK' ? '✅' : '❌'}</span>
+            <span class="status-text">STATUS: {resultStatus}</span>
+          </div>
+        {:else if !inspecting}
+          <div class="no-result">
+            <span class="no-result-icon">📷</span>
+            <p>{$t('operator.waiting')}</p>
+          </div>
+        {/if}
+
+        <!-- Session History -->
+        <div class="history-section">
+          <div class="section-label">{$t('operator.session_history')} ({recentInspections.length})</div>
+          <div class="history-list">
+            {#each recentInspections as item}
+              <div class="history-row">
+                <span class="history-id">#{item.id}</span>
+                <span class="history-part">{item.part}</span>
+                <span class="badge" class:badge-ok={item.status === 'OK'} class:badge-ng={item.status === 'NG'}>
+                  {item.status}
+                </span>
+                <span class="history-time">{item.time}</span>
+              </div>
+            {/each}
+            {#if recentInspections.length === 0}
+              <p class="no-data-text">{$t('common.no_data')}</p>
+            {/if}
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Status Bar -->
-  <div class="status-bar">
-    <span class="status-item">
-      <span class="dot" class:connected={cameraConnected}></span>
-      {cameraConnected ? $t('operator.camera_connected') : $t('operator.camera_disconnected')}
-    </span>
-    <span class="status-item">{$t('operator.inspected_today')}: <strong>{todayInspected}</strong></span>
-    <span class="status-item">NG: <strong>{todayNg}</strong> ({todayInspected > 0 ? ((todayNg/todayInspected)*100).toFixed(1) : 0}%)</span>
-    <span class="status-item">Part: <strong>{partId}</strong></span>
-    <span class="status-item">Session: <strong>#{String(sessionCount).padStart(3,'0')}</strong></span>
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <span class="status-item">
+        <span class="dot" class:connected={cameraConnected}></span>
+        {cameraConnected ? $t('operator.camera_connected') : $t('operator.camera_disconnected')}
+      </span>
+      <span class="status-item">{$t('operator.inspected_today')}: <strong>{todayInspected}</strong></span>
+      <span class="status-item">NG: <strong>{todayNg}</strong> ({todayInspected > 0 ? ((todayNg/todayInspected)*100).toFixed(1) : 0}%)</span>
+      <span class="status-item">Part: <strong>{getSelectedPartCode()}</strong></span>
+    </div>
   </div>
-</div>
+{/if}
 
 <style>
+  .loading-page {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-4);
+    color: var(--clr-text-muted);
+    min-height: 60vh;
+  }
+  .spinner-lg {
+    display: inline-block;
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--clr-border);
+    border-top-color: var(--clr-accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+  .error-banner {
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--clr-ng-bg);
+    color: var(--clr-ng);
+    border: 1px solid rgba(239,68,68,0.2);
+    border-radius: var(--radius-md);
+    font-size: var(--fs-sm);
+    margin: var(--sp-3) var(--sp-4) 0;
+  }
+  .no-data-text {
+    color: var(--clr-text-dim);
+    font-size: var(--fs-sm);
+    padding: var(--sp-4);
+    text-align: center;
+  }
+
+  /* Session Bar */
+  .session-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--clr-surface);
+    border-bottom: 1px solid var(--clr-border);
+    flex-wrap: wrap;
+  }
+  .session-info {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+  }
+  .session-badge {
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+  }
+  .session-badge.active { color: var(--clr-ok); }
+  .session-badge.inactive { color: var(--clr-text-dim); }
+  .part-selector {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  .part-selector .select {
+    width: auto;
+    min-width: 200px;
+  }
+  .part-selector .label {
+    margin-bottom: 0;
+    white-space: nowrap;
+  }
+
   .operator-page {
     flex: 1;
     display: flex;
@@ -395,6 +585,7 @@
     flex: 1;
     font-size: var(--fs-sm);
     color: var(--clr-text-muted);
+    text-transform: capitalize;
   }
   .measure-value {
     font-size: var(--fs-lg);

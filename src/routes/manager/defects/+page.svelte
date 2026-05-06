@@ -1,20 +1,61 @@
 <script>
   import { t } from '$lib/i18n.js';
-  import { mockVendorNg } from '$lib/data/mock.js';
+  import { getInspections } from '$lib/api/manager.js';
+  import { onMount } from 'svelte';
 
-  let vendors = $state([...mockVendorNg]);
+  let vendorNg = $state([]);
+  let dimFailures = $state([]);
+  let loading = $state(true);
+  let error = $state('');
 
-  const failedDimensions = [
-    { dimension: 'Lebar (Width)', count: 15, pct: 45 },
-    { dimension: 'Diameter', count: 12, pct: 36 },
-    { dimension: 'Panjang (Length)', count: 6, pct: 19 },
-  ];
+  async function fetchDefectAnalysis() {
+    loading = true;
+    error = '';
+    try {
+      const result = await getInspections({ limit: 500 });
+      const inspections = result.data || [];
+      
+      const vendorMap = {};
+      const dimMap = {};
+      
+      inspections.forEach(item => {
+        if (item.status === 'NO GOOD') {
+          const vendor = item.part?.vendorName || 'Unknown';
+          if (!vendorMap[vendor]) vendorMap[vendor] = { total: 0, ng: 0 };
+          vendorMap[vendor].ng++;
+          
+          Object.keys(item.nilaiDimensi || {}).forEach(dim => {
+            dimMap[dim] = (dimMap[dim] || 0) + 1;
+          });
+        }
+        const vendor = item.part?.vendorName || 'Unknown';
+        if (!vendorMap[vendor]) vendorMap[vendor] = { total: 0, ng: 0 };
+        vendorMap[vendor].total++;
+      });
+      
+      vendorNg = Object.entries(vendorMap)
+        .map(([name, stats]) => ({
+          name,
+          rate: stats.total > 0 ? +((stats.ng / stats.total) * 100).toFixed(1) : 0,
+          count: stats.ng,
+        }))
+        .sort((a, b) => b.rate - a.rate)
+        .slice(0, 10);
+      
+      dimFailures = Object.entries(dimMap)
+        .map(([dim, count]) => ({ dim, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+    } catch (err) {
+      error = err.message;
+    } finally {
+      loading = false;
+    }
+  }
 
-  const problemParts = [
-    { part: 'BOLT-B12', ngCount: 10, totalInspected: 200, rate: 5.0 },
-    { part: 'SHAFT-C05', ngCount: 3, totalInspected: 100, rate: 3.0 },
-    { part: 'GEAR-A01', ngCount: 5, totalInspected: 350, rate: 1.4 },
-  ];
+  onMount(() => {
+    fetchDefectAnalysis();
+  });
 </script>
 
 <svelte:head><title>{$t('manager.defect_title')} — EPSON QC</title></svelte:head>
@@ -22,68 +63,57 @@
 <div class="page animate-fade-in">
   <h1 class="page-title">{$t('manager.defect_title')}</h1>
 
-  <div class="defect-grid">
-    <!-- Vendor NG -->
+  {#if error}
+    <div class="error-banner">{error}</div>
+  {/if}
+
+  {#if loading}
+    <div class="loading-state">{$t('common.loading')}</div>
+  {:else}
+  <div class="charts-row">
     <div class="card">
       <h3 class="card-title">{$t('manager.top_ng_vendors')}</h3>
-      {#each vendors as vendor, i}
-        <div class="defect-row">
-          <span class="rank" class:top={i === 0}>#{i + 1}</span>
-          <span class="name">{vendor.name}</span>
-          <div class="bar-bg"><div class="bar-fill" style="width: {(vendor.rate / 5) * 100}%"></div></div>
-          <span class="rate">{vendor.rate}%</span>
-        </div>
-      {/each}
+      <div class="vendor-list">
+        {#each vendorNg as vendor, i}
+          <div class="vendor-row">
+            <span class="vendor-rank">#{i + 1}</span>
+            <span class="vendor-name">{vendor.name}</span>
+            <span class="vendor-rate">{vendor.rate}%</span>
+            <div class="vendor-bar-bg">
+              <div class="vendor-bar" style="width: {Math.min(vendor.rate * 10, 100)}%"></div>
+            </div>
+          </div>
+        {/each}
+      </div>
     </div>
 
-    <!-- Failed Dimensions -->
     <div class="card">
       <h3 class="card-title">{$t('manager.failed_dimension')}</h3>
-      {#each failedDimensions as dim}
-        <div class="defect-row">
-          <span class="name">{dim.dimension}</span>
-          <div class="bar-bg"><div class="bar-fill accent" style="width: {dim.pct}%"></div></div>
-          <span class="rate">{dim.count}x ({dim.pct}%)</span>
-        </div>
-      {/each}
-    </div>
-
-    <!-- Problem Parts -->
-    <div class="card full-width">
-      <h3 class="card-title">{$t('manager.problem_parts')}</h3>
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr><th>Part</th><th>NG Count</th><th>Total Inspected</th><th>NG Rate</th></tr>
-          </thead>
-          <tbody>
-            {#each problemParts as part}
-              <tr>
-                <td><strong>{part.part}</strong></td>
-                <td><span class="badge badge-ng">{part.ngCount}</span></td>
-                <td>{part.totalInspected}</td>
-                <td class="rate-cell">{part.rate}%</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+      <div class="dim-list">
+        {#each dimFailures as item, i}
+          <div class="dim-row">
+            <span class="dim-rank">#{i + 1}</span>
+            <span class="dim-name">{item.dim}</span>
+            <span class="dim-count">{item.count} kali</span>
+          </div>
+        {/each}
       </div>
     </div>
   </div>
+  {/if}
 </div>
 
 <style>
   .page-title { font-size: var(--fs-xl); font-weight: var(--fw-semibold); margin-bottom: var(--sp-5); }
-  .defect-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); }
-  .full-width { grid-column: 1 / -1; }
+  .error-banner { padding: var(--sp-3); background: var(--clr-ng-bg); color: var(--clr-ng); border-radius: var(--radius-md); font-size: var(--fs-sm); margin-bottom: var(--sp-4); border: 1px solid rgba(239,68,68,0.2); }
+  .loading-state { padding: var(--sp-8); text-align: center; color: var(--clr-text-muted); }
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); }
   .card-title { font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--clr-text-muted); margin-bottom: var(--sp-4); text-transform: uppercase; letter-spacing: 0.5px; }
-  .defect-row { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3); }
-  .rank { font-size: var(--fs-xs); color: var(--clr-text-dim); font-weight: var(--fw-bold); min-width: 24px; }
-  .rank.top { color: var(--clr-ng); }
-  .name { font-size: var(--fs-sm); min-width: 100px; }
-  .bar-bg { flex: 1; height: 8px; background: var(--clr-surface-2); border-radius: 4px; overflow: hidden; }
-  .bar-fill { height: 100%; background: linear-gradient(90deg, var(--clr-ng), #f87171); border-radius: 4px; transition: width 0.6s ease; }
-  .bar-fill.accent { background: linear-gradient(90deg, var(--clr-accent), #818cf8); }
-  .rate { font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--clr-ng); min-width: 60px; text-align: right; }
-  .rate-cell { color: var(--clr-ng); font-weight: var(--fw-semibold); }
+  .vendor-list, .dim-list { display: flex; flex-direction: column; gap: var(--sp-4); }
+  .vendor-row, .dim-row { display: grid; grid-template-columns: 30px 1fr 60px; gap: var(--sp-2); align-items: center; }
+  .vendor-rank, .dim-rank { font-size: var(--fs-xs); color: var(--clr-text-dim); font-weight: var(--fw-semibold); }
+  .vendor-name, .dim-name { font-size: var(--fs-sm); }
+  .vendor-rate, .dim-count { font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--clr-ng); text-align: right; }
+  .vendor-bar-bg { grid-column: 1 / -1; height: 6px; background: var(--clr-surface-2); border-radius: 3px; overflow: hidden; }
+  .vendor-bar { height: 100%; background: linear-gradient(90deg, var(--clr-ng), #f87171); border-radius: 3px; transition: width 0.6s ease; }
 </style>

@@ -1,7 +1,6 @@
 <script>
   import { auth, isAuthenticated, userRole } from "$lib/stores/auth.js";
   import { t } from "$lib/i18n.js";
-  import { locale } from "$lib/i18n.js";
   import { theme } from "$lib/stores/theme.js";
   import { getDashboardUrl } from "$lib/utils/rbac.js";
   import { goto } from "$app/navigation";
@@ -12,7 +11,6 @@
   let showPassword = $state(false);
   let loading = $state(false);
   let error = $state("");
-  let currentLang = $state("id");
 
   onMount(() => {
     const unsub = isAuthenticated.subscribe((val) => {
@@ -41,11 +39,6 @@
       })();
     }
   }
-
-  function toggleLang() {
-    currentLang = currentLang === "id" ? "en" : "id";
-    locale.set(currentLang);
-  }
 </script>
 
 <svelte:head>
@@ -60,7 +53,6 @@
 
   <div class="login-card animate-fade-in">
     <div class="login-header">
-      <!-- <div class="login-logo">🔬</div> -->
       <h1 class="login-brand">EPSON QC</h1>
       <p class="login-subtitle">{$t("auth.login_subtitle")}</p>
     </div>
@@ -128,19 +120,9 @@
         >
           {$theme === "light" ? "🌙" : "☀️"}
         </button>
-        <button class="lang-btn" onclick={toggleLang}>
-          {currentLang === "id" ? "🇮🇩 Bahasa Indonesia" : "🇬🇧 English"}
-        </button>
       </div>
       <span class="footer-text">{$t("app.version")} · {$t("app.company")}</span>
     </div>
-  </div>
-
-  <div class="demo-hint animate-fade-in">
-    <p>
-      Demo: <code>operator1</code> / <code>admin1</code> / <code>manager1</code>
-      / <code>auditor1</code> — password: <code>pass123</code>
-    </p>
   </div>
 </div>
 
@@ -199,10 +181,6 @@
     text-align: center;
     margin-bottom: var(--sp-8);
   }
-  /* .login-logo {
-    font-size: 3rem;
-    margin-bottom: var(--sp-3);
-  } */
   .login-brand {
     font-size: var(--fs-3xl);
     font-weight: var(--fw-bold);
@@ -280,45 +258,20 @@
     justify-content: center;
     gap: var(--sp-3);
   }
-  .lang-btn,
   .theme-btn {
     background: none;
     border: none;
     color: var(--clr-text-muted);
     cursor: pointer;
     transition: color var(--transition-fast);
-  }
-  .lang-btn {
-    font-size: var(--fs-xs);
-    font-family: var(--font-family);
-  }
-  .theme-btn {
     font-size: 1.1rem;
     padding: 2px;
   }
-  .lang-btn:hover,
   .theme-btn:hover {
     color: var(--clr-text);
   }
   .footer-text {
     font-size: var(--fs-xs);
     color: var(--clr-text-dim);
-  }
-  .demo-hint {
-    position: relative;
-    z-index: 1;
-    margin-top: var(--sp-6);
-    padding: var(--sp-3) var(--sp-4);
-    background: var(--clr-surface-2);
-    border: 1px solid var(--clr-border);
-    border-radius: var(--radius-md);
-    font-size: var(--fs-xs);
-    color: var(--clr-text-muted);
-  }
-  .demo-hint code {
-    background: var(--clr-surface-3);
-    padding: 1px 6px;
-    border-radius: 4px;
-    color: var(--clr-accent-hover);
   }
 </style>

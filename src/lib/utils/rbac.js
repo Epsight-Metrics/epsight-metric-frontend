@@ -1,4 +1,6 @@
 // RBAC utility — Role-Based Access Control
+import { toFrontendRole } from './roles.js';
+
 const ROLE_ROUTES = {
   operator: ['/operator'],
   admin: ['/admin'],

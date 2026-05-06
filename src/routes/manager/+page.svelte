@@ -1,11 +1,93 @@
 <script>
   import { t } from '$lib/i18n.js';
-  import { mockKpiData, mockTrendData, mockVendorNg } from '$lib/data/mock.js';
+  import { getKpi, getTrends, getInspections } from '$lib/api/manager.js';
+  import { onMount, onDestroy } from 'svelte';
 
-  let kpi = $state({ ...mockKpiData });
-  let trend = $state({ ...mockTrendData });
-  let vendors = $state([...mockVendorNg]);
+  let kpi = $state(null);
+  let trendData = $state({ labels: [], values: [] });
+  let vendors = $state([]);
   let filterPeriod = $state('day');
+  let loading = $state(true);
+  let error = $state('');
+  let lastUpdated = $state('');
+  let refreshInterval;
+
+  async function fetchKpi() {
+    try {
+      const data = await getKpi();
+      kpi = {
+        totalInspected: data.total,
+        okCount: data.okCount,
+        ngCount: data.ngCount,
+        okRate: parseFloat(data.okRate),
+        ngRate: parseFloat(data.ngRate),
+        throughput: data.throughputPerHour,
+      };
+    } catch (err) {
+      error = err.message;
+    }
+  }
+
+  async function fetchTrends() {
+    try {
+      const raw = await getTrends(filterPeriod);
+      const labels = raw.map((item) => {
+        const d = new Date(item.period);
+        if (filterPeriod === 'day') return d.toLocaleTimeString('id-ID', { hour: '2-digit' });
+        if (filterPeriod === 'week') return d.toLocaleDateString('id-ID', { weekday: 'short' });
+        return d.toLocaleDateString('id-ID', { month: 'short', day: 'numeric' });
+      });
+      const values = raw.map((item) =>
+        item.total > 0 ? +((item.ng_count / item.total) * 100).toFixed(1) : 0
+      );
+      trendData = { labels, values };
+    } catch (err) {
+      error = err.message;
+    }
+  }
+
+  async function fetchVendorNg() {
+    try {
+      const result = await getInspections({ limit: 500 });
+      const inspections = result.data || [];
+      const vendorMap = {};
+      inspections.forEach(item => {
+        const vendor = item.part?.vendorName || 'Unknown';
+        if (!vendorMap[vendor]) vendorMap[vendor] = { total: 0, ng: 0 };
+        vendorMap[vendor].total++;
+        if (item.status === 'NO GOOD') vendorMap[vendor].ng++;
+      });
+      vendors = Object.entries(vendorMap)
+        .map(([name, stats]) => ({
+          name,
+          rate: stats.total > 0 ? +((stats.ng / stats.total) * 100).toFixed(1) : 0,
+        }))
+        .sort((a, b) => b.rate - a.rate)
+        .slice(0, 5);
+    } catch (err) {
+      error = err.message;
+    }
+  }
+
+  async function loadAll() {
+    loading = true;
+    error = '';
+    await Promise.all([fetchKpi(), fetchTrends(), fetchVendorNg()]);
+    lastUpdated = new Date().toLocaleTimeString('id-ID');
+    loading = false;
+  }
+
+  $effect(() => {
+    filterPeriod;
+    fetchTrends();
+  });
+
+  onMount(() => {
+    loadAll();
+    refreshInterval = setInterval(loadAll, 30_000);
+  });
+
+  onDestroy(() => clearInterval(refreshInterval));
 </script>
 
 <svelte:head><title>{$t('manager.overview')} — EPSON QC</title></svelte:head>
@@ -15,7 +97,7 @@
     <h1 class="page-title">{$t('manager.overview')}</h1>
     <div class="header-actions">
       <div class="filter-pills">
-        {#each ['session', 'day', 'week', 'month'] as period}
+        {#each ['day', 'week', 'month'] as period}
           <button
             class="pill"
             class:active={filterPeriod === period}
@@ -28,6 +110,13 @@
     </div>
   </div>
 
+  {#if error}
+    <div class="error-banner">{error}</div>
+  {/if}
+
+  {#if loading && !kpi}
+    <div class="loading-state">{$t('common.loading')}</div>
+  {:else if kpi}
   <!-- KPI Cards -->
   <div class="kpi-grid">
     <div class="kpi-card">
@@ -68,15 +157,15 @@
     <div class="card chart-card">
       <h3 class="card-title">{$t('manager.trend_title')} (7 {$t('manager.filter_day')})</h3>
       <div class="bar-chart">
-        {#each trend.labels as label, i}
+        {#each trendData.labels as label, i}
           <div class="bar-col">
             <div class="bar-wrapper">
               <div
                 class="bar"
-                style="height: {(trend.values[i] / 5) * 100}%"
-                class:bar-high={trend.values[i] > 3}
+                style="height: {(trendData.values[i] / 5) * 100}%"
+                class:bar-high={trendData.values[i] > 3}
               >
-                <span class="bar-val">{trend.values[i]}%</span>
+                <span class="bar-val">{trendData.values[i]}%</span>
               </div>
             </div>
             <span class="bar-label">{label}</span>
@@ -129,12 +218,12 @@
               stroke-width="3"
               stroke-linecap="round"
               stroke-linejoin="round"
-              points={trend.values.map((v, i) => `${i * (700 / (trend.values.length - 1))},${250 - (v / 5) * 250}`).join(' ')}
+              points={trendData.values.map((v, i) => `${i * (700 / (trendData.values.length - 1))},${250 - (v / 5) * 250}`).join(' ')}
             />
             <!-- Data points -->
-            {#each trend.values as v, i}
+            {#each trendData.values as v, i}
               <circle
-                cx={i * (700 / (trend.values.length - 1))}
+                cx={i * (700 / (trendData.values.length - 1))}
                 cy={250 - (v / 5) * 250}
                 r="5"
                 fill="var(--clr-accent)"
@@ -145,7 +234,7 @@
             <!-- Area fill -->
             <polygon
               fill="url(#areaGradient)"
-              points={`0,250 ${trend.values.map((v, i) => `${i * (700 / (trend.values.length - 1))},${250 - (v / 5) * 250}`).join(' ')} 700,250`}
+              points={`0,250 ${trendData.values.map((v, i) => `${i * (700 / (trendData.values.length - 1))},${250 - (v / 5) * 250}`).join(' ')} 700,250`}
             />
             <defs>
               <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
@@ -155,7 +244,7 @@
             </defs>
           </svg>
           <div class="x-labels">
-            {#each trend.labels as label}
+            {#each trendData.labels as label}
               <span>{label}</span>
             {/each}
           </div>
@@ -167,10 +256,11 @@
   <!-- Footer -->
   <div class="page-footer">
     <span class="footer-info">
-      {$t('manager.last_updated')}: {new Date().toLocaleTimeString('id-ID')} WIB
+      {$t('manager.last_updated')}: {lastUpdated} WIB
     </span>
     <span class="footer-info auto-refresh">● {$t('manager.auto_refresh')} (30s)</span>
   </div>
+  {/if}
 </div>
 
 <style>
@@ -352,4 +442,6 @@
     border-top: 1px solid var(--clr-border);
   }
   .auto-refresh { color: var(--clr-ok); }
+  .error-banner { padding: var(--sp-3); background: var(--clr-ng-bg); color: var(--clr-ng); border-radius: var(--radius-md); font-size: var(--fs-sm); margin-bottom: var(--sp-4); border: 1px solid rgba(239,68,68,0.2); }
+  .loading-state { padding: var(--sp-8); text-align: center; color: var(--clr-text-muted); }
 </style>

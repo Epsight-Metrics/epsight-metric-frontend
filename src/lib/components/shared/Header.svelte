@@ -1,19 +1,12 @@
 <script>
   import { t } from "$lib/i18n.js";
   import { auth, currentUser } from "$lib/stores/auth.js";
-  import { locale } from "$lib/i18n.js";
   import { theme } from "$lib/stores/theme.js";
   import { goto } from "$app/navigation";
 
   let { role = "operator", title = "" } = $props();
 
   let showUserMenu = $state(false);
-  let currentLang = $state("id");
-
-  function toggleLang() {
-    currentLang = currentLang === "id" ? "en" : "id";
-    locale.set(currentLang);
-  }
 
   async function handleLogout() {
     if (confirm($t("auth.logout_confirm"))) {
@@ -44,13 +37,7 @@
       {$theme === "light" ? "🌙" : "☀️"}
     </button>
 
-    <button
-      class="lang-toggle btn btn-ghost"
-      onclick={toggleLang}
-      title="Switch Language"
-    >
-      {currentLang === "id" ? "🇮🇩 ID" : "🇬🇧 EN"}
-    </button>
+
 
     <div class="user-menu-wrapper">
       <button class="user-btn" onclick={() => (showUserMenu = !showUserMenu)}>

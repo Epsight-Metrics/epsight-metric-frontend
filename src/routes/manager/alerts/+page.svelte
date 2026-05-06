@@ -1,53 +1,94 @@
 <script>
   import { t } from '$lib/i18n.js';
-  import { mockAlerts } from '$lib/data/mock.js';
+  import { getAlertSummary } from '$lib/api/manager.js';
+  import { onMount } from 'svelte';
 
-  let alerts = $state([...mockAlerts]);
+  let alerts = $state([]);
+  let loading = $state(true);
+  let error = $state('');
+
+  async function fetchAlerts() {
+    loading = true;
+    error = '';
+    try {
+      const result = await getAlertSummary();
+      alerts = (result.data || []).map(item => ({
+        id: item.id,
+        timestamp: new Date(item.timestamp).toLocaleString('id-ID'),
+        partName: item.part?.partName || '-',
+        partCode: item.part?.partCode || '-',
+        vendor: item.part?.vendorName || '-',
+        operator: item.operator?.name || '-',
+        dimensions: item.nilaiDimensi || {},
+      }));
+    } catch (err) {
+      error = err.message;
+    } finally {
+      loading = false;
+    }
+  }
+
+  onMount(() => {
+    fetchAlerts();
+  });
 </script>
 
 <svelte:head><title>{$t('manager.alert_summary')} — EPSON QC</title></svelte:head>
 
 <div class="page animate-fade-in">
   <h1 class="page-title">{$t('manager.alert_summary')}</h1>
-  <p class="subtitle">Ringkasan notifikasi kegagalan (NG) terbaru</p>
 
-  <div class="alert-list">
+  {#if error}
+    <div class="error-banner">{error}</div>
+  {/if}
+
+  {#if loading}
+    <div class="loading-state">{$t('common.loading')}</div>
+  {:else}
+  <div class="alerts-grid">
     {#each alerts as alert}
-      <div class="alert-card card">
+      <div class="alert-card animate-fade-in">
         <div class="alert-header">
-          <span class="badge badge-ng">NG</span>
-          <span class="alert-part">{alert.partId}</span>
+          <span class="alert-icon">⚠️</span>
           <span class="alert-time">{alert.timestamp}</span>
         </div>
         <div class="alert-body">
-          <div class="alert-detail">
-            <span class="dl">Vendor:</span> {alert.vendor}
-          </div>
-          <div class="alert-detail">
-            <span class="dl">Dimensi Gagal:</span> {alert.dimension}
-          </div>
-          <div class="alert-detail">
-            <span class="dl">Nilai:</span> <span class="val-ng">{alert.value} mm</span> (Ekspektasi: {alert.expected} mm)
-          </div>
-          <div class="alert-detail">
-            <span class="dl">Operator:</span> {alert.operator}
+          <h3 class="alert-part">{alert.partName}</h3>
+          <p class="alert-detail">Part Code: <code>{alert.partCode}</code></p>
+          <p class="alert-detail">Vendor: {alert.vendor}</p>
+          <p class="alert-detail">Operator: {alert.operator}</p>
+          <div class="alert-dims">
+            {#each Object.entries(alert.dimensions) as [key, val]}
+              <span class="dim-badge">{key}: {val}mm</span>
+            {/each}
           </div>
         </div>
       </div>
     {/each}
+    {#if alerts.length === 0}
+      <div class="no-alerts">
+        <span class="no-alerts-icon">✅</span>
+        <p>Tidak ada peringatan NG</p>
+      </div>
+    {/if}
   </div>
+  {/if}
 </div>
 
 <style>
-  .page-title { font-size: var(--fs-xl); font-weight: var(--fw-semibold); margin-bottom: var(--sp-2); }
-  .subtitle { color: var(--clr-text-dim); font-size: var(--fs-sm); margin-bottom: var(--sp-5); }
-  .alert-list { display: flex; flex-direction: column; gap: var(--sp-3); }
-  .alert-card { border-left: 3px solid var(--clr-ng); }
-  .alert-header { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3); }
-  .alert-part { font-weight: var(--fw-semibold); }
-  .alert-time { margin-left: auto; font-size: var(--fs-xs); color: var(--clr-text-dim); }
-  .alert-body { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
-  .alert-detail { font-size: var(--fs-sm); }
-  .dl { color: var(--clr-text-muted); }
-  .val-ng { color: var(--clr-ng); font-weight: var(--fw-semibold); }
+  .page-title { font-size: var(--fs-xl); font-weight: var(--fw-semibold); margin-bottom: var(--sp-5); }
+  .error-banner { padding: var(--sp-3); background: var(--clr-ng-bg); color: var(--clr-ng); border-radius: var(--radius-md); font-size: var(--fs-sm); margin-bottom: var(--sp-4); border: 1px solid rgba(239,68,68,0.2); }
+  .loading-state { padding: var(--sp-8); text-align: center; color: var(--clr-text-muted); }
+  .alerts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--sp-4); }
+  .alert-card { background: var(--clr-surface); border: 1px solid var(--clr-border); border-left: 3px solid var(--clr-ng); border-radius: var(--radius-lg); padding: var(--sp-4); }
+  .alert-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-3); }
+  .alert-icon { font-size: 1.5rem; }
+  .alert-time { font-size: var(--fs-xs); color: var(--clr-text-dim); }
+  .alert-part { font-size: var(--fs-md); font-weight: var(--fw-semibold); margin-bottom: var(--sp-2); }
+  .alert-detail { font-size: var(--fs-sm); color: var(--clr-text-muted); margin-bottom: var(--sp-1); }
+  .alert-dims { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin-top: var(--sp-2); }
+  .dim-badge { font-size: var(--fs-xs); padding: 2px var(--sp-2); background: var(--clr-surface-2); border-radius: var(--radius-sm); }
+  code { background: var(--clr-surface-2); padding: 1px 6px; border-radius: 4px; font-size: var(--fs-xs); }
+  .no-alerts { text-align: center; padding: var(--sp-12); color: var(--clr-text-dim); grid-column: 1 / -1; }
+  .no-alerts-icon { font-size: 3rem; display: block; margin-bottom: var(--sp-3); }
 </style>
