@@ -306,7 +306,7 @@
           </div>
         {:else if !inspecting}
           <div class="no-result">
-            <span class="no-result-icon">📷</span>
+            <span class="no-result-icon"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></span>
             <p>{$t('operator.waiting')}</p>
           </div>
         {/if}
@@ -648,7 +648,7 @@
     color: var(--clr-text-dim);
     gap: var(--sp-3);
   }
-  .no-result-icon { font-size: 3rem; opacity: 0.5; }
+  .no-result-icon { display: flex; opacity: 0.5; }
 
   /* History */
   .history-section {

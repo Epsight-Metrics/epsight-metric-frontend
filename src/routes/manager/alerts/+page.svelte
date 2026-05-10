@@ -49,7 +49,7 @@
     {#each alerts as alert}
       <div class="alert-card animate-fade-in">
         <div class="alert-header">
-          <span class="alert-icon">⚠️</span>
+          <span class="alert-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
           <span class="alert-time">{alert.timestamp}</span>
         </div>
         <div class="alert-body">
@@ -84,7 +84,7 @@
   .alerts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--sp-4); }
   .alert-card { background: var(--clr-surface); border: 1px solid var(--clr-border); border-left: 3px solid var(--clr-ng); border-radius: var(--radius-lg); padding: var(--sp-4); }
   .alert-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-3); }
-  .alert-icon { font-size: 1.5rem; }
+  .alert-icon { display: flex; color: var(--clr-warning); }
   .alert-time { font-size: var(--fs-xs); color: var(--clr-text-dim); }
   .alert-part { font-size: var(--fs-md); font-weight: var(--fw-semibold); margin-bottom: var(--sp-2); }
   .alert-detail { font-size: var(--fs-sm); color: var(--clr-text-muted); margin-bottom: var(--sp-1); }
