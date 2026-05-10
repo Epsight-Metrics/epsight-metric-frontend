@@ -49,10 +49,18 @@
   <div class="login-bg">
     <div class="bg-gradient"></div>
     <div class="bg-grid"></div>
+    <div class="bg-accent-circle c1"></div>
+    <div class="bg-accent-circle c2"></div>
   </div>
 
   <div class="login-card animate-fade-in">
     <div class="login-header">
+      <div class="brand-mark">
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </div>
       <h1 class="login-brand">EPSON QC</h1>
       <p class="login-subtitle">{$t("auth.login_subtitle")}</p>
     </div>
@@ -131,6 +139,7 @@
     position: relative;
     overflow: hidden;
     padding: var(--sp-4);
+    background: var(--clr-bg);
   }
   .login-bg {
     position: absolute;
@@ -140,49 +149,67 @@
   .bg-gradient {
     position: absolute;
     inset: 0;
-    background: radial-gradient(
-        ellipse at 30% 20%,
-        rgba(99, 102, 241, 0.15) 0%,
-        transparent 50%
-      ),
-      radial-gradient(
-        ellipse at 70% 80%,
-        rgba(139, 92, 246, 0.1) 0%,
-        transparent 50%
-      );
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(0, 51, 153, 0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 80%, rgba(37, 99, 235, 0.04) 0%, transparent 50%);
   }
   .bg-grid {
     position: absolute;
     inset: 0;
-    background-image: linear-gradient(
-        rgba(255, 255, 255, 0.02) 1px,
-        transparent 1px
-      ),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-    background-size: 40px 40px;
+    background-image:
+      linear-gradient(rgba(0, 51, 153, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 51, 153, 0.03) 1px, transparent 1px);
+    background-size: 48px 48px;
   }
+  .bg-accent-circle {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 51, 153, 0.06);
+  }
+  .bg-accent-circle.c1 {
+    width: 400px;
+    height: 400px;
+    top: -100px;
+    right: -100px;
+  }
+  .bg-accent-circle.c2 {
+    width: 300px;
+    height: 300px;
+    bottom: -80px;
+    left: -80px;
+  }
+
   .login-card {
     position: relative;
     z-index: 1;
     width: 100%;
-    max-width: 400px;
+    max-width: 420px;
     background: var(--clr-surface);
     border: 1px solid var(--clr-border);
     border-radius: var(--radius-xl);
     padding: var(--sp-10);
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--shadow-xl);
   }
   .login-header {
     text-align: center;
     margin-bottom: var(--sp-8);
   }
+  .brand-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    background: var(--clr-accent);
+    color: #fff;
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--sp-4);
+  }
   .login-brand {
+    font-family: var(--font-heading);
     font-size: var(--fs-3xl);
     font-weight: var(--fw-bold);
-    background: linear-gradient(135deg, var(--clr-accent), #a78bfa);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--clr-accent);
     letter-spacing: 2px;
   }
   .login-subtitle {
@@ -202,7 +229,7 @@
     border-radius: var(--radius-md);
     font-size: var(--fs-sm);
     text-align: center;
-    border: 1px solid rgba(239, 68, 68, 0.2);
+    border: 1px solid var(--clr-ng-border);
   }
   .password-field {
     position: relative;
@@ -219,12 +246,19 @@
     border: none;
     cursor: pointer;
     font-size: 1rem;
-    padding: 2px;
+    padding: 4px;
+    color: var(--clr-text-dim);
+    display: flex;
+    align-items: center;
+    transition: color var(--transition-fast);
+  }
+  .password-toggle:hover {
+    color: var(--clr-text);
   }
   .login-btn {
     width: 100%;
     margin-top: var(--sp-2);
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
   }
   .spinner {
     display: inline-block;

@@ -370,7 +370,7 @@
     padding: var(--sp-3) var(--sp-4);
     background: var(--clr-ng-bg);
     color: var(--clr-ng);
-    border: 1px solid rgba(239,68,68,0.2);
+    border: 1px solid var(--clr-ng-border);
     border-radius: var(--radius-md);
     font-size: var(--fs-sm);
     margin: var(--sp-3) var(--sp-4) 0;
@@ -382,15 +382,14 @@
     text-align: center;
   }
 
-  /* Session Bar */
   .session-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--sp-4);
-    padding: var(--sp-3) var(--sp-4);
+    padding: var(--sp-4) var(--sp-5);
     background: var(--clr-surface);
-    border-bottom: 1px solid var(--clr-border);
+    border-bottom: 2px solid var(--clr-border);
     flex-wrap: wrap;
   }
   .session-info {
@@ -399,7 +398,7 @@
     gap: var(--sp-3);
   }
   .session-badge {
-    font-size: var(--fs-sm);
+    font-size: var(--fs-base);
     font-weight: var(--fw-medium);
   }
   .session-badge.active { color: var(--clr-ok); }
@@ -411,7 +410,9 @@
   }
   .part-selector .select {
     width: auto;
-    min-width: 200px;
+    min-width: 220px;
+    min-height: 48px;
+    font-size: var(--fs-md);
   }
   .part-selector .label {
     margin-bottom: 0;
@@ -426,11 +427,12 @@
   .inspect-grid {
     flex: 1;
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--sp-4);
-    padding: var(--sp-4);
+    grid-template-columns: 3fr 2fr;
+    gap: var(--sp-5);
+    padding: var(--sp-5);
   }
   .section-label {
+    font-family: var(--font-heading);
     font-size: var(--fs-xs);
     font-weight: var(--fw-semibold);
     color: var(--clr-text-muted);
@@ -448,16 +450,17 @@
   .camera-feed { position: relative; }
   .camera-placeholder {
     aspect-ratio: 4/3;
-    background: var(--clr-surface);
-    border: 1px solid var(--clr-border);
+    min-height: 400px;
+    border: 2px solid var(--clr-border);
     border-radius: var(--radius-lg);
     position: relative;
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
+    box-shadow: var(--shadow-card);
     background:
-      radial-gradient(circle at center, rgba(99,102,241,0.05) 0%, transparent 70%),
+      radial-gradient(circle at center, rgba(0,51,153,0.03) 0%, transparent 70%),
       var(--clr-surface);
   }
   .camera-circle {
@@ -469,21 +472,21 @@
   }
   .crosshair {
     position: absolute;
-    background: rgba(99,102,241,0.3);
+    background: rgba(0,51,153,0.15);
   }
   .crosshair.h { width: 100%; height: 1px; top: 50%; }
   .crosshair.v { width: 1px; height: 100%; left: 50%; }
   .corner {
     position: absolute;
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     border-color: var(--clr-accent);
     border-style: solid;
   }
-  .corner.tl { top: 12px; left: 12px; border-width: 2px 0 0 2px; }
-  .corner.tr { top: 12px; right: 12px; border-width: 2px 2px 0 0; }
-  .corner.bl { bottom: 12px; left: 12px; border-width: 0 0 2px 2px; }
-  .corner.br { bottom: 12px; right: 12px; border-width: 0 2px 2px 0; }
+  .corner.tl { top: 16px; left: 16px; border-width: 3px 0 0 3px; }
+  .corner.tr { top: 16px; right: 16px; border-width: 3px 3px 0 0; }
+  .corner.bl { bottom: 16px; left: 16px; border-width: 0 0 3px 3px; }
+  .corner.br { bottom: 16px; right: 16px; border-width: 0 3px 3px 0; }
   .camera-hint {
     position: absolute;
     bottom: 16px;
@@ -527,34 +530,39 @@
     box-shadow: 0 0 6px var(--clr-ok);
   }
 
-  /* Inspect Button */
+  /* Inspect Button - XL touch target for factory operators */
   .inspect-btn {
-    padding: var(--sp-4) var(--sp-6);
-    font-family: var(--font-family);
-    font-size: var(--fs-xl);
+    padding: 20px var(--sp-12);
+    font-family: var(--font-heading);
+    font-size: 1.35rem;
     font-weight: var(--fw-bold);
     color: #fff;
-    background: linear-gradient(135deg, var(--clr-accent), #7c3aed);
+    background: var(--clr-accent);
     border: none;
     border-radius: var(--radius-lg);
     cursor: pointer;
     transition: all var(--transition-base);
-    letter-spacing: 1px;
+    letter-spacing: 1.5px;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: var(--sp-3);
+    min-height: 64px;
   }
   .inspect-btn:hover:not(:disabled) {
+    background: var(--clr-accent-hover);
     transform: translateY(-2px);
     box-shadow: var(--shadow-glow-accent);
+  }
+  .inspect-btn:active:not(:disabled) {
+    transform: scale(0.97);
   }
   .inspect-btn:disabled {
     opacity: 0.7;
     cursor: wait;
   }
   .inspect-btn.inspecting {
-    background: linear-gradient(135deg, #4338ca, #6d28d9);
+    background: var(--clr-accent-hover);
   }
   .spinner {
     display: inline-block;
@@ -594,8 +602,9 @@
     text-transform: capitalize;
   }
   .measure-value {
-    font-size: var(--fs-lg);
-    font-weight: var(--fw-semibold);
+    font-family: var(--font-heading);
+    font-size: var(--fs-xl);
+    font-weight: var(--fw-bold);
     font-variant-numeric: tabular-nums;
   }
   .measure-check {
@@ -608,25 +617,24 @@
     padding: var(--sp-6);
     border-radius: var(--radius-lg);
     text-align: center;
-    font-size: var(--fs-2xl);
+    font-family: var(--font-heading);
+    font-size: var(--fs-3xl);
     font-weight: var(--fw-bold);
     display: flex;
     align-items: center;
     justify-content: center;
     gap: var(--sp-3);
-    letter-spacing: 2px;
+    letter-spacing: 3px;
   }
   .status-card.ok {
     background: var(--clr-ok-bg);
     color: var(--clr-ok);
-    border: 2px solid rgba(34,197,94,0.3);
-    box-shadow: var(--shadow-glow-ok);
+    border: 2px solid var(--clr-ok-border);
   }
   .status-card.ng {
     background: var(--clr-ng-bg);
     color: var(--clr-ng);
-    border: 2px solid rgba(239,68,68,0.3);
-    box-shadow: var(--shadow-glow-ng);
+    border: 2px solid var(--clr-ng-border);
     animation: blink 1s ease infinite;
   }
   .status-icon { font-size: var(--fs-3xl); }
@@ -739,11 +747,18 @@
     background: #fff;
     color: var(--clr-ng);
     border: none;
-    font-size: var(--fs-md);
-    padding: var(--sp-4) var(--sp-8);
+    font-size: var(--fs-lg);
+    font-weight: var(--fw-bold);
+    padding: 20px var(--sp-12);
+    min-height: 64px;
   }
   .confirm-btn:hover {
     background: #f0f0f0;
     box-shadow: none;
+  }
+
+  @media (max-width: 1024px) {
+    .inspect-grid { grid-template-columns: 1fr; }
+    .camera-placeholder { min-height: 300px; }
   }
 </style>

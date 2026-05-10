@@ -149,13 +149,13 @@
 
 <style>
   .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-5); flex-wrap: wrap; gap: var(--sp-3); }
-  .page-title { font-size: var(--fs-xl); font-weight: var(--fw-semibold); }
+  .page-title { font-family: var(--font-heading); font-size: var(--fs-2xl); font-weight: var(--fw-semibold); }
   .export-btns { display: flex; gap: var(--sp-2); }
   .filter-row { display: flex; gap: var(--sp-3); margin-bottom: var(--sp-4); flex-wrap: wrap; }
-  .filter-input { max-width: 250px; }
-  .filter-select { max-width: 200px; }
+  .filter-input { max-width: 280px; min-height: 44px; }
+  .filter-select { max-width: 220px; min-height: 44px; }
   .dim { color: var(--clr-text-dim); font-size: var(--fs-xs); }
-  .error-banner { padding: var(--sp-3); background: var(--clr-ng-bg); color: var(--clr-ng); border-radius: var(--radius-md); font-size: var(--fs-sm); margin-bottom: var(--sp-4); border: 1px solid rgba(239,68,68,0.2); }
+  .error-banner { padding: var(--sp-3); background: var(--clr-ng-bg); color: var(--clr-ng); border-radius: var(--radius-md); font-size: var(--fs-sm); margin-bottom: var(--sp-4); border: 1px solid var(--clr-ng-border); }
   .loading-state { padding: var(--sp-8); text-align: center; color: var(--clr-text-muted); }
   .no-data { text-align: center; color: var(--clr-text-dim); padding: var(--sp-8) !important; }
   code { background: var(--clr-surface-2); padding: 1px 6px; border-radius: 4px; font-size: var(--fs-xs); }

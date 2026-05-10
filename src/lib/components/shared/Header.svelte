@@ -19,7 +19,12 @@
 <header class="header">
   <div class="header-left">
     <div class="header-brand">
-      <!-- <span class="brand-icon">🔬</span> -->
+      <div class="brand-mark">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </div>
       <span class="brand-text">EPSON QC</span>
     </div>
     {#if title}
@@ -29,17 +34,19 @@
   </div>
 
   <div class="header-right">
-
-
-
-
     <div class="user-menu-wrapper">
       <button class="user-btn" onclick={() => (showUserMenu = !showUserMenu)}>
         <div class="user-avatar">
           {$currentUser?.fullname?.charAt(0) || "?"}
         </div>
         <span class="user-name">{$currentUser?.fullname || "User"}</span>
-        <span class="user-chevron">{showUserMenu ? "▲" : "▼"}</span>
+        <svg class="user-chevron" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          {#if showUserMenu}
+            <polyline points="18 15 12 9 6 15"/>
+          {:else}
+            <polyline points="6 9 12 15 18 9"/>
+          {/if}
+        </svg>
       </button>
 
       {#if showUserMenu}
@@ -51,7 +58,7 @@
             >
           </div>
           <hr class="dropdown-divider" />
-          <button class="dropdown-item" onclick={handleLogout} style="display: flex; align-items: center; gap: 8px;">
+          <button class="dropdown-item" onclick={handleLogout}>
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             {$t("auth.logout")}
           </button>
@@ -77,10 +84,11 @@
     height: var(--header-height);
     padding: 0 var(--sp-6);
     background: var(--clr-surface);
-    border-bottom: 1px solid var(--clr-border);
+    border-bottom: 2px solid var(--clr-border);
     position: sticky;
     top: 0;
     z-index: 100;
+    box-shadow: var(--shadow-sm);
   }
   .header-left {
     display: flex;
@@ -92,16 +100,22 @@
     align-items: center;
     gap: var(--sp-2);
   }
-  /* .brand-icon {
-    font-size: 1.4rem;
-  } */
+  .brand-mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--clr-accent);
+    color: #fff;
+    border-radius: var(--radius-md);
+  }
   .brand-text {
+    font-family: var(--font-heading);
     font-size: var(--fs-lg);
     font-weight: var(--fw-bold);
-    background: linear-gradient(135deg, var(--clr-accent), #a78bfa);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--clr-accent);
+    letter-spacing: 1.5px;
   }
   .header-divider {
     width: 1px;
@@ -111,14 +125,12 @@
   .header-title {
     font-size: var(--fs-sm);
     color: var(--clr-text-muted);
+    font-weight: var(--fw-medium);
   }
   .header-right {
     display: flex;
     align-items: center;
     gap: var(--sp-3);
-  }
-  .lang-toggle {
-    font-size: var(--fs-sm);
   }
   .user-menu-wrapper {
     position: relative;
@@ -127,8 +139,8 @@
     display: flex;
     align-items: center;
     gap: var(--sp-2);
-    padding: var(--sp-1) var(--sp-3);
-    background: var(--clr-surface-2);
+    padding: 6px var(--sp-3);
+    background: var(--clr-surface);
     border: 1px solid var(--clr-border);
     border-radius: var(--radius-full);
     color: var(--clr-text);
@@ -138,12 +150,13 @@
   }
   .user-btn:hover {
     border-color: var(--clr-border-light);
+    box-shadow: var(--shadow-sm);
   }
   .user-avatar {
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--clr-accent), #a78bfa);
+    background: var(--clr-accent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -160,15 +173,14 @@
     white-space: nowrap;
   }
   .user-chevron {
-    font-size: 10px;
-    color: var(--clr-text-muted);
+    color: var(--clr-text-dim);
   }
   .user-dropdown {
     position: absolute;
     top: calc(100% + 8px);
     right: 0;
     width: 220px;
-    background: var(--clr-surface-2);
+    background: var(--clr-surface);
     border: 1px solid var(--clr-border);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
@@ -191,7 +203,9 @@
     margin: 0;
   }
   .dropdown-item {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     width: 100%;
     padding: var(--sp-3) var(--sp-4);
     text-align: left;
@@ -204,8 +218,8 @@
     transition: all var(--transition-fast);
   }
   .dropdown-item:hover {
-    background: var(--clr-surface-3);
-    color: var(--clr-text);
+    background: var(--clr-surface-2);
+    color: var(--clr-ng);
   }
   .backdrop {
     position: fixed;

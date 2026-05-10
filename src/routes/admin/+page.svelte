@@ -299,11 +299,11 @@
 
 <style>
   .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-5); }
-  .page-title { font-size: var(--fs-xl); font-weight: var(--fw-semibold); }
+  .page-title { font-family: var(--font-heading); font-size: var(--fs-2xl); font-weight: var(--fw-semibold); }
   .search-bar { margin-bottom: var(--sp-4); max-width: 400px; }
   .dim { color: var(--clr-text-dim); }
   .no-data { text-align: center; color: var(--clr-text-dim); padding: var(--sp-8) !important; }
-  .error-banner { padding: var(--sp-3); background: var(--clr-ng-bg); color: var(--clr-ng); border-radius: var(--radius-md); font-size: var(--fs-sm); margin-bottom: var(--sp-4); border: 1px solid rgba(239,68,68,0.2); }
+  .error-banner { padding: var(--sp-3); background: var(--clr-ng-bg); color: var(--clr-ng); border-radius: var(--radius-md); font-size: var(--fs-sm); margin-bottom: var(--sp-4); border: 1px solid var(--clr-ng-border); }
   .loading-state { padding: var(--sp-8); text-align: center; color: var(--clr-text-muted); }
   code { background: var(--clr-surface-2); padding: 1px 6px; border-radius: 4px; font-size: var(--fs-xs); }
   .badge-btn { border: none; cursor: pointer; transition: opacity var(--transition-fast); }
@@ -317,7 +317,7 @@
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 500; padding: var(--sp-4); }
   .modal { background: var(--clr-surface); border: 1px solid var(--clr-border); border-radius: var(--radius-xl); padding: var(--sp-8); width: 100%; max-width: 480px; box-shadow: var(--shadow-lg); }
   .modal-sm { max-width: 380px; }
-  .modal-title { font-size: var(--fs-lg); font-weight: var(--fw-semibold); margin-bottom: var(--sp-5); }
+  .modal-title { font-family: var(--font-heading); font-size: var(--fs-xl); font-weight: var(--fw-semibold); margin-bottom: var(--sp-5); }
   .modal-msg { color: var(--clr-text-muted); margin-bottom: var(--sp-2); }
   .modal-detail { font-weight: var(--fw-medium); margin-bottom: var(--sp-5); }
   .modal-actions { display: flex; justify-content: flex-end; gap: var(--sp-3); margin-top: var(--sp-6); }
