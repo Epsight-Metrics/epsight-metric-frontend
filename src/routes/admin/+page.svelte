@@ -105,19 +105,6 @@
     }
   }
 
-  async function toggleActive(user) {
-    error = '';
-    try {
-      if (user.isActive) {
-        await deleteUser(user.id, false); // Deactivate
-      } else {
-        await updateUser(user.id, { name: user.name }); // Re-activate (update triggers it)
-      }
-      await fetchUsers();
-    } catch (err) {
-      error = err.message;
-    }
-  }
 
   function goToPage(p) {
     page = p;
@@ -192,9 +179,9 @@
                 </span>
               </td>
               <td>
-                <button class="active-dot" class:is-active={user.isActive} onclick={() => toggleActive(user)} title={user.isActive ? $t('admin.deactivate') : $t('admin.activate')}>
-                  {user.isActive ? '●' : '○'}
-                </button>
+                <span class="badge" class:badge-ok={user.isActive} class:badge-ng={!user.isActive} style="padding: 4px 8px; font-size: var(--fs-xs);">
+                  {user.isActive ? 'Aktif' : 'Non-Aktif'}
+                </span>
               </td>
               <td class="dim">{new Date(user.createdAt).toLocaleDateString('id-ID')}</td>
               <td>
@@ -319,9 +306,8 @@
   .error-banner { padding: var(--sp-3); background: var(--clr-ng-bg); color: var(--clr-ng); border-radius: var(--radius-md); font-size: var(--fs-sm); margin-bottom: var(--sp-4); border: 1px solid rgba(239,68,68,0.2); }
   .loading-state { padding: var(--sp-8); text-align: center; color: var(--clr-text-muted); }
   code { background: var(--clr-surface-2); padding: 1px 6px; border-radius: 4px; font-size: var(--fs-xs); }
-  .active-dot { background: none; border: none; font-size: 1.2rem; cursor: pointer; padding: var(--sp-1); transition: color var(--transition-fast); }
-  .active-dot.is-active { color: var(--clr-ok); }
-  .active-dot:not(.is-active) { color: var(--clr-text-dim); }
+  .badge-btn { border: none; cursor: pointer; transition: opacity var(--transition-fast); }
+  .badge-btn:hover { opacity: 0.8; }
   .action-btns { display: flex; gap: var(--sp-1); }
   .table-footer { margin-top: var(--sp-3); font-size: var(--fs-xs); color: var(--clr-text-dim); display: flex; justify-content: space-between; align-items: center; }
   .pagination { display: flex; align-items: center; gap: var(--sp-2); }

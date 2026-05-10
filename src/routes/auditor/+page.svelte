@@ -20,7 +20,7 @@
     try {
       const params = { page, limit };
       if (filterPart) params.partName = filterPart;
-      if (filterStatus) params.status = filterStatus === 'OK' ? 'GOOD' : 'NO GOOD';
+      if (filterStatus) params.status = filterStatus;
       const result = await getInspections(params);
       inspections = (result.data || []).map(item => ({
         id: item.id,
@@ -28,7 +28,7 @@
         partName: item.part?.partName || '-',
         partCode: item.part?.partCode || '-',
         vendor: item.part?.vendorName || '-',
-        status: item.status === 'GOOD' ? 'OK' : 'NG',
+        status: (item.status === 'GOOD' || item.status === 'OK') ? 'OK' : 'NG',
         operator: item.operator?.name || '-',
         dimensions: item.nilaiDimensi || {},
       }));
@@ -44,7 +44,7 @@
     try {
       const params = { format };
       if (filterPart) params.partName = filterPart;
-      if (filterStatus) params.status = filterStatus === 'OK' ? 'GOOD' : 'NO GOOD';
+      if (filterStatus) params.status = filterStatus;
       const blob = await exportData(params);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

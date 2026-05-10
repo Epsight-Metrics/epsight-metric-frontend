@@ -55,7 +55,7 @@
         const vendor = item.part?.vendorName || 'Unknown';
         if (!vendorMap[vendor]) vendorMap[vendor] = { total: 0, ng: 0 };
         vendorMap[vendor].total++;
-        if (item.status === 'NO GOOD') vendorMap[vendor].ng++;
+        if (item.status === 'NG' || item.status === 'NO GOOD') vendorMap[vendor].ng++;
       });
       vendors = Object.entries(vendorMap)
         .map(([name, stats]) => ({

@@ -95,33 +95,6 @@
   --header-height: 64px;
 }
 
-[data-theme="dark"] {
-  /* Colors - Dark Theme */
-  --clr-bg: #0f1117;
-  --clr-surface: #1a1d27;
-  --clr-surface-2: #242836;
-  --clr-surface-3: #2e3244;
-  --clr-border: #2e3348;
-  --clr-border-light: #3a3f55;
-
-  /* Text */
-  --clr-text: #e8eaed;
-  --clr-text-muted: #8b90a0;
-  --clr-text-dim: #5c6178;
-
-  /* Accent */
-  --clr-accent: #6366f1;
-  --clr-accent-hover: #818cf8;
-  --clr-accent-subtle: rgba(99, 102, 241, 0.12);
-
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --shadow-glow-ok: 0 0 20px rgba(34, 197, 94, 0.3);
-  --shadow-glow-ng: 0 0 20px rgba(239, 68, 68, 0.3);
-  --shadow-glow-accent: 0 0 20px rgba(99, 102, 241, 0.3);
-}
 
 /* --- Base Styles --- */
 html {

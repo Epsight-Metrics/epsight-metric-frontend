@@ -1,7 +1,7 @@
 <script>
   import { t } from "$lib/i18n.js";
   import { auth, currentUser } from "$lib/stores/auth.js";
-  import { theme } from "$lib/stores/theme.js";
+
   import { goto } from "$app/navigation";
 
   let { role = "operator", title = "" } = $props();
@@ -29,13 +29,7 @@
   </div>
 
   <div class="header-right">
-    <button
-      class="theme-toggle btn btn-ghost btn-icon"
-      onclick={() => theme.toggle()}
-      title="Toggle Theme"
-    >
-      {$theme === "light" ? "🌙" : "☀️"}
-    </button>
+
 
 
 
@@ -57,8 +51,9 @@
             >
           </div>
           <hr class="dropdown-divider" />
-          <button class="dropdown-item" onclick={handleLogout}>
-            🚪 {$t("auth.logout")}
+          <button class="dropdown-item" onclick={handleLogout} style="display: flex; align-items: center; gap: 8px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            {$t("auth.logout")}
           </button>
         </div>
       {/if}
@@ -124,12 +119,6 @@
   }
   .lang-toggle {
     font-size: var(--fs-sm);
-    padding: var(--sp-1) var(--sp-3);
-    border-radius: var(--radius-full);
-  }
-  .theme-toggle {
-    font-size: 1.1rem;
-    border-radius: 50%;
   }
   .user-menu-wrapper {
     position: relative;

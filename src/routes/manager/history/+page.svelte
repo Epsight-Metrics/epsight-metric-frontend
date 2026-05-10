@@ -21,7 +21,7 @@
     try {
       const params = { page, limit };
       if (filterPart) params.partName = filterPart;
-      if (filterStatus) params.status = filterStatus === 'OK' ? 'GOOD' : 'NO GOOD';
+      if (filterStatus) params.status = filterStatus;
       const result = await getInspections(params);
       history = (result.data || []).map(item => ({
         id: item.id,
@@ -30,7 +30,7 @@
         partCode: item.part?.partCode || '-',
         vendor: item.part?.vendorName || '-',
         dimensions: item.nilaiDimensi || {},
-        status: item.status === 'GOOD' ? 'OK' : 'NG',
+        status: (item.status === 'GOOD' || item.status === 'OK') ? 'OK' : 'NG',
         operator: item.operator?.name || '-',
         configVersion: item.configVersion || '-',
       }));
@@ -48,7 +48,7 @@
     try {
       const params = { format };
       if (filterPart) params.partName = filterPart;
-      if (filterStatus) params.status = filterStatus === 'OK' ? 'GOOD' : 'NO GOOD';
+      if (filterStatus) params.status = filterStatus;
       const blob = await exportData(params);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -124,7 +124,13 @@
       <tbody>
         {#each history as item}
           <tr class="clickable" onclick={() => toggleExpand(item.id)}>
-            <td class="expand-icon">{expandedId === item.id ? '▼' : '▶'}</td>
+            <td class="expand-icon" style="vertical-align: middle;">
+              {#if expandedId === item.id}
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+              {:else}
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+              {/if}
+            </td>
             <td class="dim">{item.timestamp}</td>
             <td><strong>{item.partName}</strong></td>
             <td>{item.vendor}</td>
