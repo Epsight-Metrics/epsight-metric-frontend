@@ -1,6 +1,5 @@
 # EPSight Metrics - Dimensional Inspection System
 
-![Banner](static/images/banner.png)
 
 ## 🚀 Overview
 
