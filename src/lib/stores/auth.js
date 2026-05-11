@@ -1,6 +1,6 @@
 // Auth store — JWT-based authentication against Express.js backend
 import { writable, derived } from 'svelte/store';
-import { login as apiLogin } from '$lib/api/auth.js';
+import { login as apiLogin, logout as apiLogout } from '$lib/api/auth.js';
 import { toFrontendRole } from '$lib/utils/roles.js';
 
 function createAuthStore() {
@@ -21,7 +21,7 @@ function createAuthStore() {
       update((s) => ({ ...s, loading: true, error: null }));
 
       try {
-        const { token, user } = await apiLogin(username, password);
+        const { accessToken, user } = await apiLogin(username, password);
 
         // Map backend user shape to frontend shape
         const mappedUser = {
@@ -33,7 +33,7 @@ function createAuthStore() {
         };
 
         if (typeof localStorage !== 'undefined') {
-          localStorage.setItem('srs_token', token);
+          localStorage.setItem('srs_token', accessToken);
           localStorage.setItem('srs_user', JSON.stringify(mappedUser));
         }
 
@@ -56,7 +56,12 @@ function createAuthStore() {
     /**
      * Logout — clear token and user from storage.
      */
-    logout: () => {
+    logout: async () => {
+      try {
+        await apiLogout();
+      } catch (err) {
+        console.error('Logout API error:', err);
+      }
       set({ user: null, isAuthenticated: false, loading: false, error: null });
       if (typeof localStorage !== 'undefined') {
         localStorage.removeItem('srs_token');

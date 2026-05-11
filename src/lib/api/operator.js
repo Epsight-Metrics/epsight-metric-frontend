@@ -37,3 +37,11 @@ export async function submitInspection(data) {
 export async function getParts() {
   return api.get('/operator/parts');
 }
+
+/**
+ * Submit a CV inspection result (no auth required).
+ * @param {object} data - CV Inspection payload
+ */
+export async function submitCvInspection(data) {
+  return api.post('/operator/inspect/cv', data);
+}

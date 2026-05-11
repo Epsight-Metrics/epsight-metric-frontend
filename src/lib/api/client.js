@@ -1,6 +1,7 @@
 // Centralized API client — JWT auth, error handling, token management
 const API_BASE = '/api';
 
+
 /**
  * Get the stored JWT token.
  */
@@ -42,9 +43,15 @@ export async function apiFetch(endpoint, options = {}) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  const fetchOptions = {
+    ...options,
+    headers,
+    credentials: 'include',
+  };
+
   let response;
   try {
-    response = await fetch(url, { ...options, headers });
+    response = await fetch(url, fetchOptions);
   } catch (err) {
     throw new ApiError('Koneksi jaringan gagal. Periksa koneksi Anda.', 0);
   }
@@ -59,16 +66,61 @@ export async function apiFetch(endpoint, options = {}) {
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    if (response.status === 401) {
-      // Token expired — clear auth and redirect to login
-      if (typeof localStorage !== 'undefined') {
+    if (response.status === 401 && endpoint !== '/auth/refresh' && endpoint !== '/auth/login' && endpoint !== '/auth/logout') {
+      try {
+        // Attempt to refresh token
+        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        });
+        const refreshData = await refreshRes.json().catch(() => null);
+
+        if (refreshRes.ok && refreshData?.accessToken) {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('srs_token', refreshData.accessToken);
+          }
+          // Retry original request
+          fetchOptions.headers['Authorization'] = `Bearer ${refreshData.accessToken}`;
+          const retryRes = await fetch(url, fetchOptions);
+
+          if (retryRes.headers.get('content-type')?.includes('application/pdf') || retryRes.headers.get('content-type')?.includes('text/csv')) {
+            if (!retryRes.ok) throw new ApiError('Export gagal', retryRes.status);
+            return retryRes.blob();
+          }
+
+          const retryData = await retryRes.json().catch(() => null);
+          if (retryRes.ok) return retryData;
+
+          throw new ApiError(
+            retryData?.message || `Permintaan gagal (${retryRes.status})`,
+            retryRes.status,
+            retryData?.errors || null
+          );
+        } else {
+          throw new Error('Refresh failed');
+        }
+      } catch (err) {
+        // Clear session on refresh failure
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem('srs_token');
+          localStorage.removeItem('srs_user');
+        }
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
+        throw new ApiError('Sesi berakhir, silakan login kembali', 401);
+      }
+    } else if (response.status === 401) {
+      if (typeof localStorage !== 'undefined' && endpoint !== '/auth/login') {
         localStorage.removeItem('srs_token');
         localStorage.removeItem('srs_user');
       }
-      if (typeof window !== 'undefined') {
+      if (typeof window !== 'undefined' && endpoint !== '/auth/login') {
         window.location.href = '/login';
       }
     }
+
     throw new ApiError(
       data?.message || `Permintaan gagal (${response.status})`,
       response.status,

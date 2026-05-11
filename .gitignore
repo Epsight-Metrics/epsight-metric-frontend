@@ -24,3 +24,8 @@ vite.config.ts.timestamp-*
 
 # Markdown files in root
 /*.md
+
+playwright-report/
+playwright.config.ts
+test-results/
+tests/

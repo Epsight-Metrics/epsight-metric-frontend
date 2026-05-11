@@ -16,3 +16,11 @@ export async function getInspections(params = {}) {
 export async function exportData(params = {}) {
   return api.download('/audit/export', params);
 }
+
+/**
+ * Get detailed info for a specific inspection.
+ * @param {string} id - Inspection ID
+ */
+export async function getInspectionDetail(id) {
+  return api.get(`/audit/inspections/${id}`);
+}
