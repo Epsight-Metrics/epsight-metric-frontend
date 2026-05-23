@@ -3,17 +3,20 @@ import { api } from './client.js';
 
 /**
  * Get KPI summary data.
+ * @param {object} params - { dateFrom?, dateTo? }
  */
-export async function getKpi() {
-  return api.get('/qcmanager/kpi');
+export async function getKpi(params = {}) {
+  return api.get('/qcmanager/kpi', params);
 }
 
 /**
  * Get trend data.
  * @param {string} period - 'day' | 'week' | 'month'
+ * @param {object} params - Additional params like dateFrom, dateTo
  */
-export async function getTrends(period = 'day') {
-  return api.get('/qcmanager/trends', { period });
+export async function getTrends(period = 'day', params = {}) {
+  // If dateFrom and dateTo provided, backend will ignore period
+  return api.get('/qcmanager/trends', { period, ...params });
 }
 
 /**

@@ -6,7 +6,10 @@
   let kpi = $state(null);
   let trendData = $state({ labels: [], values: [] });
   let vendors = $state([]);
-  let filterPeriod = $state('day');
+  let dimFailures = $state([]);
+  let dateFrom = $state('');
+  let dateTo = $state('');
+  let activeQuickFilter = $state('');
   let loading = $state(true);
   let error = $state('');
   let lastUpdated = $state('');
@@ -14,7 +17,11 @@
 
   async function fetchKpi() {
     try {
-      const data = await getKpi();
+      const params = {};
+      if (dateFrom) params.dateFrom = dateFrom;
+      if (dateTo) params.dateTo = dateTo;
+      
+      const data = await getKpi(params);
       kpi = {
         totalInspected: data.total,
         okCount: data.okCount,
@@ -28,41 +35,125 @@
     }
   }
 
+  let selectedPeriod = $state(null);
+  let selectedDetail = $state(null);
+
+  let maxVendorRate = $derived(Math.max(...vendors.map(v => v.rate), 1));
+  let maxDimCount = $derived(Math.max(...dimFailures.map(d => d.count), 1));
+  let maxNgRate = $derived(Math.max(...trendData.values, 5));
+
   async function fetchTrends() {
     try {
-      const raw = await getTrends(filterPeriod);
-      const labels = raw.map((item) => {
+      let params = {};
+      let period = 'day';
+      
+      // Determine period based on date range
+      if (dateFrom && dateTo) {
+        const daysDiff = Math.ceil((new Date(dateTo) - new Date(dateFrom)) / (1000 * 60 * 60 * 24));
+        
+        // Choose appropriate period to get enough data from backend
+        if (daysDiff <= 1) {
+          period = 'day'; // hourly data for 1 day
+        } else if (daysDiff <= 7) {
+          period = 'week'; // daily data for up to 7 days
+        } else {
+          period = 'month'; // weekly data for longer ranges
+        }
+        
+        params.dateFrom = dateFrom;
+        params.dateTo = dateTo;
+      }
+      
+      console.log('Fetching trends with params:', { period, ...params });
+      const raw = await getTrends(period, params);
+      console.log('Trends response (raw):', raw);
+      
+      // Filter di frontend untuk memastikan data sesuai range
+      let filteredData = raw;
+      if (dateFrom && dateTo) {
+        const startDate = new Date(dateFrom + 'T00:00:00');
+        const endDate = new Date(dateTo + 'T23:59:59');
+        
+        filteredData = raw.filter(item => {
+          const itemDate = new Date(item.period);
+          return itemDate >= startDate && itemDate <= endDate;
+        });
+        
+        console.log('Filtered data:', filteredData);
+      }
+      
+      // Check if single day (show hourly) or multiple days (show daily)
+      const isSingleDay = dateFrom === dateTo;
+      
+      const labels = filteredData.map((item) => {
         const d = new Date(item.period);
-        if (filterPeriod === 'day') return d.toLocaleTimeString('id-ID', { hour: '2-digit' });
-        if (filterPeriod === 'week') return d.toLocaleDateString('id-ID', { weekday: 'short' });
-        return d.toLocaleDateString('id-ID', { month: 'short', day: 'numeric' });
+        if (isSingleDay) {
+          return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        } else {
+          return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+        }
       });
-      const values = raw.map((item) =>
+      const values = filteredData.map((item) =>
         item.total > 0 ? +((item.ng_count / item.total) * 100).toFixed(1) : 0
       );
-      trendData = { labels, values };
+      trendData = { labels, values, raw: filteredData };
     } catch (err) {
+      console.error('Trends error:', err);
       error = err.message;
     }
   }
 
+  function selectBar(index) {
+    selectedPeriod = index;
+    const data = trendData.raw[index];
+    const total = data.total || 0;
+    const ngCount = data.ng_count || 0;
+    const okCount = data.ok_count || (total - ngCount);
+    selectedDetail = {
+      label: trendData.labels[index],
+      ngRate: trendData.values[index],
+      total: total,
+      okCount: okCount,
+      ngCount: ngCount,
+      period: data.period
+    };
+  }
+
   async function fetchVendorNg() {
     try {
-      const result = await getInspections({ limit: 500 });
+      const params = { limit: 500 };
+      if (dateFrom) params.dateFrom = dateFrom;
+      if (dateTo) params.dateTo = dateTo;
+      
+      const result = await getInspections(params);
       const inspections = result.data || [];
       const vendorMap = {};
+      const dimMap = {};
+      
       inspections.forEach(item => {
         const vendor = item.part?.vendorName || 'Unknown';
         if (!vendorMap[vendor]) vendorMap[vendor] = { total: 0, ng: 0 };
         vendorMap[vendor].total++;
-        if (item.status === 'NG' || item.status === 'NO GOOD') vendorMap[vendor].ng++;
+        
+        if (item.status === 'NG' || item.status === 'NO GOOD') {
+          vendorMap[vendor].ng++;
+          Object.keys(item.nilaiDimensi || {}).forEach(dim => {
+            dimMap[dim] = (dimMap[dim] || 0) + 1;
+          });
+        }
       });
+      
       vendors = Object.entries(vendorMap)
         .map(([name, stats]) => ({
           name,
           rate: stats.total > 0 ? +((stats.ng / stats.total) * 100).toFixed(1) : 0,
         }))
         .sort((a, b) => b.rate - a.rate)
+        .slice(0, 5);
+      
+      dimFailures = Object.entries(dimMap)
+        .map(([dim, count]) => ({ dim, count }))
+        .sort((a, b) => b.count - a.count)
         .slice(0, 5);
     } catch (err) {
       error = err.message;
@@ -77,12 +168,63 @@
     loading = false;
   }
 
+  function applyFilter() {
+    if (dateFrom && dateTo) {
+      if (new Date(dateFrom) > new Date(dateTo)) {
+        error = 'Tanggal mulai tidak boleh lebih besar dari tanggal akhir';
+        return;
+      }
+      activeQuickFilter = '';
+      loadAll();
+    } else {
+      error = 'Silakan pilih rentang tanggal';
+    }
+  }
+
+  function setQuickFilter(type) {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    dateTo = `${year}-${month}-${day}`;
+    
+    if (type === 'today') {
+      dateFrom = dateTo;
+      activeQuickFilter = 'today';
+    } else if (type === 'week') {
+      const weekAgo = new Date(today);
+      weekAgo.setDate(today.getDate() - 7);
+      const wYear = weekAgo.getFullYear();
+      const wMonth = String(weekAgo.getMonth() + 1).padStart(2, '0');
+      const wDay = String(weekAgo.getDate()).padStart(2, '0');
+      dateFrom = `${wYear}-${wMonth}-${wDay}`;
+      activeQuickFilter = 'week';
+    } else if (type === 'month') {
+      const monthAgo = new Date(today);
+      monthAgo.setMonth(today.getMonth() - 1);
+      const mYear = monthAgo.getFullYear();
+      const mMonth = String(monthAgo.getMonth() + 1).padStart(2, '0');
+      const mDay = String(monthAgo.getDate()).padStart(2, '0');
+      dateFrom = `${mYear}-${mMonth}-${mDay}`;
+      activeQuickFilter = 'month';
+    }
+    
+    loadAll();
+  }
+
   $effect(() => {
-    filterPeriod;
-    fetchTrends();
+    // Removed auto-fetch on date change
   });
 
   onMount(() => {
+    // Set default date range: last 7 days
+    const today = new Date();
+    const lastWeek = new Date(today);
+    lastWeek.setDate(today.getDate() - 7);
+    
+    dateTo = today.toISOString().split('T')[0];
+    dateFrom = lastWeek.toISOString().split('T')[0];
+    
     loadAll();
     refreshInterval = setInterval(loadAll, 30_000);
   });
@@ -96,22 +238,33 @@
   <div class="page-header">
     <h1 class="page-title">{$t('manager.overview')}</h1>
     <div class="header-actions">
-      <div class="filter-pills">
-        {#each ['day', 'week', 'month'] as period}
-          <button
-            class="pill"
-            class:active={filterPeriod === period}
-            onclick={() => filterPeriod = period}
-          >
-            {$t(`manager.filter_${period}`)}
-          </button>
-        {/each}
+      <div class="quick-filters">
+        <button class="quick-btn" class:active={activeQuickFilter === 'today'} onclick={() => setQuickFilter('today')}>Hari Ini</button>
+        <button class="quick-btn" class:active={activeQuickFilter === 'week'} onclick={() => setQuickFilter('week')}>Minggu Ini</button>
+        <button class="quick-btn" class:active={activeQuickFilter === 'month'} onclick={() => setQuickFilter('month')}>Bulan Ini</button>
+      </div>
+      <div class="date-filters">
+        <div class="date-input-group">
+          <label class="date-label">Dari:</label>
+          <input type="date" class="date-input" bind:value={dateFrom} />
+        </div>
+        <div class="date-input-group">
+          <label class="date-label">Sampai:</label>
+          <input type="date" class="date-input" bind:value={dateTo} />
+        </div>
+        <button class="btn btn-primary" onclick={applyFilter}>Terapkan</button>
       </div>
     </div>
   </div>
 
   {#if error}
     <div class="error-banner">{error}</div>
+  {/if}
+
+  {#if dateFrom && dateTo}
+    <div class="date-range-info">
+      Data rentang waktu {dateFrom} ke {dateTo}
+    </div>
   {/if}
 
   {#if loading && !kpi}
@@ -163,18 +316,20 @@
   <div class="charts-row">
     <!-- Trend Chart (CSS-based bar chart) -->
     <div class="card chart-card">
-      <h3 class="card-title">{$t('manager.trend_title')} (7 {$t('manager.filter_day')})</h3>
+      <h3 class="card-title">Tren NG Rate</h3>
       <div class="bar-chart">
         {#each trendData.labels as label, i}
           <div class="bar-col">
             <div class="bar-wrapper">
-              <div
+              <button
                 class="bar"
-                style="height: {(trendData.values[i] / 5) * 100}%"
-                class:bar-high={trendData.values[i] > 3}
+                class:bar-high={trendData.values[i] > maxNgRate * 0.6}
+                class:bar-selected={selectedPeriod === i}
+                style="height: {(trendData.values[i] / maxNgRate) * 100}%"
+                onclick={() => selectBar(i)}
               >
                 <span class="bar-val">{trendData.values[i]}%</span>
-              </div>
+              </button>
             </div>
             <span class="bar-label">{label}</span>
           </div>
@@ -192,74 +347,77 @@
             <span class="vendor-name">{vendor.name}</span>
             <span class="vendor-rate">{vendor.rate}%</span>
             <div class="vendor-bar-bg">
-              <div class="vendor-bar" style="width: {(vendor.rate / 5) * 100}%"></div>
+              <div class="vendor-bar" style="width: {vendor.rate}%"></div>
             </div>
           </div>
         {/each}
       </div>
     </div>
-  </div>
 
-  <!-- Line Chart Row -->
-  <div class="charts-row line-chart-row">
-    <div class="card chart-card full-width">
-      <h3 class="card-title">{$t('manager.trend_title')}</h3>
-      <div class="line-chart">
-        <div class="y-axis">
-          {#each [5, 4, 3, 2, 1, 0] as val}
-            <div class="y-tick">
-              <span class="y-label">{val}%</span>
-              <div class="y-line"></div>
+    <!-- Top Failed Dimensions -->
+    <div class="card chart-card">
+      <h3 class="card-title">Dimensi Gagal Terbanyak</h3>
+      <div class="vendor-list">
+        {#if dimFailures.length > 0}
+          {#each dimFailures as item, i}
+            <div class="vendor-row">
+              <span class="vendor-rank">#{i + 1}</span>
+              <span class="vendor-name">{item.dim}</span>
+              <span class="vendor-rate">{item.count}x</span>
+              <div class="vendor-bar-bg">
+                <div class="vendor-bar" style="width: {(item.count / maxDimCount) * 100}%"></div>
+              </div>
             </div>
           {/each}
+        {:else}
+          <div class="no-data-chart">Tidak ada data dimensi gagal</div>
+        {/if}
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail Panel -->
+  {#if selectedDetail}
+  <div class="charts-row detail-row">
+    <div class="card chart-card full-width">
+      <div class="detail-header">
+        <h3 class="card-title">Detail Periode: {selectedDetail.label}</h3>
+        <button class="btn-close" onclick={() => { selectedPeriod = null; selectedDetail = null; }}>✕</button>
+      </div>
+      <div class="detail-grid">
+        <div class="detail-card">
+          <div class="detail-icon" style="color: var(--clr-accent);">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+          </div>
+          <div class="detail-info">
+            <span class="detail-value">{selectedDetail.total}</span>
+            <span class="detail-label">Total Inspeksi</span>
+          </div>
         </div>
-        <div class="chart-area">
-          <svg viewBox="0 0 700 250" class="line-svg" preserveAspectRatio="none">
-            <!-- Grid lines -->
-            {#each [0, 50, 100, 150, 200, 250] as y}
-              <line x1="0" y1={y} x2="700" y2={y} stroke="var(--clr-border)" stroke-width="0.5" />
-            {/each}
-            <!-- Data line -->
-            <polyline
-              fill="none"
-              stroke="var(--clr-accent)"
-              stroke-width="3"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              points={trendData.values.map((v, i) => `${i * (700 / (trendData.values.length - 1))},${250 - (v / 5) * 250}`).join(' ')}
-            />
-            <!-- Data points -->
-            {#each trendData.values as v, i}
-              <circle
-                cx={i * (700 / (trendData.values.length - 1))}
-                cy={250 - (v / 5) * 250}
-                r="5"
-                fill="var(--clr-accent)"
-                stroke="var(--clr-bg)"
-                stroke-width="2"
-              />
-            {/each}
-            <!-- Area fill -->
-            <polygon
-              fill="url(#areaGradient)"
-              points={`0,250 ${trendData.values.map((v, i) => `${i * (700 / (trendData.values.length - 1))},${250 - (v / 5) * 250}`).join(' ')} 700,250`}
-            />
-            <defs>
-              <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="var(--clr-accent)" stop-opacity="0.2" />
-                <stop offset="100%" stop-color="var(--clr-accent)" stop-opacity="0" />
-              </linearGradient>
-            </defs>
-          </svg>
-          <div class="x-labels">
-            {#each trendData.labels as label}
-              <span>{label}</span>
-            {/each}
+        <div class="detail-card ok-card">
+          <div class="detail-icon" style="color: var(--clr-ok);">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <div class="detail-info">
+            <span class="detail-value">{selectedDetail.okCount}</span>
+            <span class="detail-label">OK Parts</span>
+            <span class="detail-percent">{selectedDetail.total > 0 ? ((selectedDetail.okCount / selectedDetail.total) * 100).toFixed(1) : 0}%</span>
+          </div>
+        </div>
+        <div class="detail-card ng-card">
+          <div class="detail-icon" style="color: var(--clr-ng);">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+          </div>
+          <div class="detail-info">
+            <span class="detail-value">{selectedDetail.ngCount}</span>
+            <span class="detail-label">NG Parts</span>
+            <span class="detail-percent" style="color: var(--clr-ng);">{selectedDetail.ngRate}%</span>
           </div>
         </div>
       </div>
     </div>
   </div>
+  {/if}
 
   <!-- Footer -->
   <div class="page-footer">
@@ -281,27 +439,62 @@
     gap: var(--sp-3);
   }
   .page-title { font-family: var(--font-heading); font-size: var(--fs-2xl); font-weight: var(--fw-semibold); }
-  .filter-pills { display: flex; gap: var(--sp-1); }
-  .pill {
-    padding: var(--sp-1) var(--sp-3);
+  .header-actions { display: flex; gap: var(--sp-4); align-items: center; flex-wrap: wrap; }
+  .quick-filters { display: flex; gap: var(--sp-2); }
+  .quick-btn {
+    padding: var(--sp-2) var(--sp-3);
     font-family: var(--font-family);
     font-size: var(--fs-xs);
     font-weight: var(--fw-medium);
     color: var(--clr-text-muted);
     background: var(--clr-surface);
     border: 1px solid var(--clr-border);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     cursor: pointer;
     transition: all var(--transition-fast);
   }
-  .pill.active {
-    background: var(--clr-accent);
-    color: #fff;
-    border-color: var(--clr-accent);
-    box-shadow: var(--shadow-glow-accent);
-  }
-  .pill:hover:not(.active) {
+  .quick-btn:hover {
     background: var(--clr-surface-2);
+    border-color: var(--clr-border-light);
+  }
+  .quick-btn.active {
+    background: var(--clr-accent);
+    color: white;
+    border-color: var(--clr-accent);
+  }
+  .quick-btn:active {
+    transform: scale(0.98);
+  }
+  .date-range-info {
+    font-size: var(--fs-sm);
+    color: var(--clr-text-muted);
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--clr-surface);
+    border-left: 3px solid var(--clr-accent);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--sp-4);
+  }
+  .date-filters { display: flex; gap: var(--sp-3); align-items: center; }
+  .date-input-group { display: flex; align-items: center; gap: var(--sp-2); }
+  .date-label { font-size: var(--fs-sm); color: var(--clr-text-muted); font-weight: var(--fw-medium); }
+  .date-input {
+    padding: var(--sp-2) var(--sp-3);
+    font-family: var(--font-family);
+    font-size: var(--fs-sm);
+    color: var(--clr-text);
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  .date-input:hover {
+    border-color: var(--clr-border-light);
+  }
+  .date-input:focus {
+    outline: none;
+    border-color: var(--clr-accent);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
 
   /* KPI Cards */
@@ -338,7 +531,7 @@
   /* Charts */
   .charts-row {
     display: grid;
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: 2fr 1fr 1fr;
     gap: var(--sp-4);
     margin-bottom: var(--sp-4);
   }
@@ -380,8 +573,20 @@
     background: linear-gradient(180deg, var(--clr-accent-light), var(--clr-accent));
     border-radius: var(--radius-sm) var(--radius-sm) 0 0;
     position: relative;
-    transition: height 0.6s ease;
+    transition: all 0.3s ease;
     min-height: 4px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    padding: 0;
+    font: inherit;
+  }
+  .bar:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  .bar.bar-selected {
+    border-color: var(--clr-accent);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
   }
   .bar.bar-high {
     background: linear-gradient(180deg, #ef4444, var(--clr-ng));
@@ -426,22 +631,21 @@
     transition: width 0.6s ease;
   }
 
-  /* Line Chart */
-  .line-chart-row {
-    margin-top: var(--sp-6);
-  }
-  .full-width {
-    width: 100%;
-    grid-column: 1 / -1;
-  }
-  .line-chart { display: flex; gap: var(--sp-2); margin-top: var(--sp-4); }
-  .y-axis { display: flex; flex-direction: column; justify-content: space-between; padding-right: var(--sp-2); }
-  .y-tick { display: flex; align-items: center; gap: var(--sp-2); }
-  .y-label { font-size: var(--fs-xs); color: var(--clr-text-dim); min-width: 30px; text-align: right; }
-  .y-line { display: none; }
-  .chart-area { flex: 1; }
-  .line-svg { width: 100%; height: 250px; }
-  .x-labels { display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--clr-text-dim); margin-top: var(--sp-2); }
+  /* Detail Panel */
+  .detail-row { margin-top: var(--sp-4); animation: slideDown 0.3s ease; }
+  @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+  .detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-4); }
+  .btn-close { background: none; border: none; font-size: var(--fs-xl); color: var(--clr-text-dim); cursor: pointer; padding: var(--sp-1); transition: color 0.2s; }
+  .btn-close:hover { color: var(--clr-text); }
+  .detail-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4); }
+  .detail-card { background: var(--clr-surface-2); border: 1px solid var(--clr-border); border-radius: var(--radius-lg); padding: var(--sp-5); display: flex; align-items: center; gap: var(--sp-4); }
+  .ok-card { border-left: 3px solid var(--clr-ok); }
+  .ng-card { border-left: 3px solid var(--clr-ng); }
+  .detail-icon { font-size: 2rem; }
+  .detail-info { display: flex; flex-direction: column; }
+  .detail-value { font-family: var(--font-heading); font-size: var(--fs-2xl); font-weight: var(--fw-bold); line-height: 1.2; }
+  .detail-label { font-size: var(--fs-xs); color: var(--clr-text-muted); text-transform: uppercase; margin-top: var(--sp-1); }
+  .detail-percent { font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--clr-ok); margin-top: var(--sp-1); }
 
   .page-footer {
     display: flex;
@@ -458,8 +662,14 @@
   @media (max-width: 1024px) {
     .kpi-grid { grid-template-columns: repeat(2, 1fr); }
     .charts-row { grid-template-columns: 1fr; }
+    .detail-grid { grid-template-columns: 1fr; }
   }
   @media (max-width: 768px) {
     .kpi-grid { grid-template-columns: 1fr; }
+  }
+
+  .full-width {
+    width: 100%;
+    grid-column: 1 / -1;
   }
 </style>

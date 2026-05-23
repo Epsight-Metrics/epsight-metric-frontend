@@ -192,13 +192,16 @@
           shape:        data.shape || '-',
           fromCV:       true,
         };
-        recentInspections = [mapped, ...recentInspections.slice(0, 19)];
-        todayInspected++;
+        // Cek duplikasi berdasarkan ID
+        if (!recentInspections.some(item => item.id === mapped.id)) {
+          recentInspections = [mapped, ...recentInspections.slice(0, 19)];
+          todayInspected++;
+          if (mapped.status === 'NG') todayNg++;
+        }
         measurements = mapped.dimensions;
         resultStatus  = mapped.status;
         hasResult     = true;
         lastCvResult  = mapped;
-        if (mapped.status === 'NG') todayNg++;
       }
       if (eventType === 'ng-alert') {
         ngAlertData   = data;

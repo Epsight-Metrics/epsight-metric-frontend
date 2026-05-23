@@ -186,8 +186,12 @@
               <td class="dim">{new Date(user.createdAt).toLocaleDateString('id-ID')}</td>
               <td>
                 <div class="action-btns">
-                  <button class="btn btn-ghost btn-icon" style="width: auto" title="Edit" onclick={() => openEdit(user)}>Edit</button>
-                  <button class="btn btn-ghost btn-icon" style="width: auto" title="Delete" onclick={() => openDelete(user)}>Del</button>
+                  <button class="btn-icon btn-edit" title="Edit" onclick={() => openEdit(user)}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                  </button>
+                  <button class="btn-icon btn-delete" title="Delete" onclick={() => openDelete(user)}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                  </button>
                 </div>
               </td>
             </tr>
@@ -308,7 +312,39 @@
   code { background: var(--clr-surface-2); padding: 1px 6px; border-radius: 4px; font-size: var(--fs-xs); }
   .badge-btn { border: none; cursor: pointer; transition: opacity var(--transition-fast); }
   .badge-btn:hover { opacity: 0.8; }
-  .action-btns { display: flex; gap: var(--sp-1); }
+  .action-btns { display: flex; gap: var(--sp-2); }
+  .btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    background: var(--clr-surface);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  .btn-edit {
+    color: var(--clr-accent);
+  }
+  .btn-edit:hover {
+    background: var(--clr-accent);
+    color: white;
+    border-color: var(--clr-accent);
+  }
+  .btn-delete {
+    color: var(--clr-ng);
+    border-color: var(--clr-ng);
+  }
+  .btn-delete:hover {
+    background: var(--clr-ng);
+    color: white;
+  }
+  .btn-icon:active {
+    transform: scale(0.95);
+  }
   .table-footer { margin-top: var(--sp-3); font-size: var(--fs-xs); color: var(--clr-text-dim); display: flex; justify-content: space-between; align-items: center; }
   .pagination { display: flex; align-items: center; gap: var(--sp-2); }
   .page-num { font-weight: var(--fw-medium); color: var(--clr-text-muted); }
