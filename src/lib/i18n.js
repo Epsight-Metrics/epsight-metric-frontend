@@ -1,4 +1,4 @@
-// i18n — Bahasa Indonesia only
+// i18n - Bahasa Indonesia only
 import { writable, derived } from 'svelte/store';
 
 export const locale = writable('id');
@@ -36,7 +36,7 @@ const translations = {
 
   // Operator
   'operator.live_camera': 'Kamera Langsung',
-  'operator.inspect_btn': '🔍 INSPEKSI SEKARANG',
+  'operator.inspect_btn': 'INSPEKSI SEKARANG',
   'operator.inspecting': 'Memproses...',
   'operator.result': 'Hasil Inspeksi',
   'operator.length': 'Panjang',
@@ -51,14 +51,14 @@ const translations = {
   'operator.camera_connected': 'Kamera Terhubung',
   'operator.camera_disconnected': 'Kamera Terputus',
   'operator.inspected_today': 'Diinspeksi Hari Ini',
-  'operator.ng_alert_title': '⚠️ PRODUK NG',
-  'operator.ng_alarm': '🔊 ALARM AKTIF — SEGERA PISAHKAN PART',
-  'operator.sop_title': '📋 PANDUAN SOP:',
+  'operator.ng_alert_title': 'PRODUK NG',
+  'operator.ng_alarm': 'ALARM AKTIF - SEGERA PISAHKAN PART',
+  'operator.sop_title': 'PANDUAN SOP:',
   'operator.sop_1': '1. Ambil part dari lightbox',
   'operator.sop_2': '2. Beri label HOLD pada part',
   'operator.sop_3': '3. Letakkan di area karantina',
   'operator.sop_4': '4. Laporkan ke Engineering via sistem',
-  'operator.confirm_next': '✓ KONFIRMASI & LANJUT KE PART BERIKUTNYA',
+  'operator.confirm_next': 'KONFIRMASI & LANJUT KE PART BERIKUTNYA',
   'operator.waiting': 'Menunggu part...',
   'operator.align_part': 'Sejajarkan part di dalam lightbox',
   'operator.start_session': 'Mulai Sesi',
@@ -103,8 +103,8 @@ const translations = {
   'manager.problem_parts': 'Part Bermasalah',
   'manager.inspection_history': 'Riwayat Inspeksi',
   'manager.alert_summary': 'Ringkasan Peringatan',
-  'manager.export_csv': '📥 Export CSV',
-  'manager.export_pdf': '📄 Export PDF',
+  'manager.export_csv': 'Export CSV',
+  'manager.export_pdf': 'Export PDF',
   'manager.filter_session': 'Sesi',
   'manager.filter_day': 'Hari',
   'manager.filter_week': 'Minggu',
@@ -114,7 +114,7 @@ const translations = {
 
   // Auditor
   'auditor.title': 'Panel Audit',
-  'auditor.inspection_logs': 'Log Inspeksi — Tampilan Audit',
+  'auditor.inspection_logs': 'Log Inspeksi - Tampilan Audit',
   'auditor.advanced_filter': 'Filter Lanjutan',
   'auditor.period': 'Periode',
   'auditor.to': 's/d',
@@ -122,7 +122,7 @@ const translations = {
   'auditor.vendor': 'Vendor',
   'auditor.status': 'Status',
   'auditor.operator': 'Operator',
-  'auditor.search': '🔍 Cari',
+  'auditor.search': 'Cari',
   'auditor.time': 'Waktu',
   'auditor.part_name': 'Nama Part',
   'auditor.part_code': 'Kode Part',
@@ -137,9 +137,9 @@ const translations = {
   'auditor.batch_id': 'ID Batch',
   'auditor.records': 'Rekaman',
   'auditor.verified': 'Terverifikasi',
-  'auditor.export_csv': '📥 Export CSV',
-  'auditor.export_pdf': '📄 Export PDF',
-  'auditor.print': '🖨 Cetak',
+  'auditor.export_csv': 'Export CSV',
+  'auditor.export_pdf': 'Export PDF',
+  'auditor.print': 'ðŸ–¨ Cetak',
   'auditor.total_records': 'Total Rekaman',
   'auditor.integrity_rate': 'Integritas Terverifikasi',
 
@@ -162,6 +162,13 @@ const translations = {
   'common.error': 'Terjadi kesalahan',
   'common.retry': 'Coba Lagi',
 
+  // Engineer
+  'engineer.title': 'Dashboard Engineer',
+  'engineer.calibration': 'Kalibrasi CV',
+  'engineer.calibration_desc': 'Atur parameter deteksi kamera untuk sistem inspeksi otomatis',
+  'nav.calibration': 'Kalibrasi Parameter CV',
+  'role.engineer': 'Engineer',
+
   // Roles
   'role.operator': 'Operator QC',
   'role.admin': 'Admin',
@@ -179,3 +186,4 @@ export const t = derived(locale, () => {
 export function setLocale(lang) {
   locale.set(lang);
 }
+

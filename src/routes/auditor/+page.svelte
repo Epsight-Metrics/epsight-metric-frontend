@@ -1,5 +1,6 @@
 <script>
   import { t } from '$lib/i18n.js';
+  import { Download, FileText, Search } from '@lucide/svelte';
   import { getInspections, exportData } from '$lib/api/audit.js';
   import { onMount } from 'svelte';
 
@@ -83,8 +84,8 @@
   <div class="page-header">
     <h1 class="page-title">{$t('auditor.inspection_logs')}</h1>
     <div class="export-btns">
-      <button class="btn btn-secondary" onclick={() => handleExport('csv')}>{$t('auditor.export_csv')}</button>
-      <button class="btn btn-secondary" onclick={() => handleExport('pdf')}>{$t('auditor.export_pdf')}</button>
+      <button class="btn btn-secondary" onclick={() => handleExport('csv')}><Download size={15} />{$t('auditor.export_csv')}</button>
+      <button class="btn btn-secondary" onclick={() => handleExport('pdf')}><FileText size={15} />{$t('auditor.export_pdf')}</button>
     </div>
   </div>
 

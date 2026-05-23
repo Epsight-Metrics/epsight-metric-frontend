@@ -1,4 +1,4 @@
-// RBAC utility — Role-Based Access Control
+﻿// RBAC utility — Role-Based Access Control
 import { toFrontendRole } from './roles.js';
 
 const ROLE_ROUTES = {
@@ -6,6 +6,7 @@ const ROLE_ROUTES = {
   admin: ['/admin'],
   manager: ['/manager'],
   auditor: ['/auditor'],
+  engineer: ['/engineer'],
 };
 
 const ROLE_DASHBOARDS = {
@@ -13,6 +14,7 @@ const ROLE_DASHBOARDS = {
   admin: '/admin',
   manager: '/manager',
   auditor: '/auditor',
+  engineer: '/engineer',
 };
 
 export function canAccess(role, path) {
@@ -32,5 +34,6 @@ export function getAllRoles() {
     { value: 'admin', label: 'Admin' },
     { value: 'manager', label: 'QC Manager' },
     { value: 'auditor', label: 'Auditor' },
+    { value: 'engineer', label: 'Engineer' },
   ];
 }

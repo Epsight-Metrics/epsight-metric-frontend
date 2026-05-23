@@ -1,7 +1,9 @@
 <script>
   import { t } from '$lib/i18n.js';
+  import { Scan, AlertTriangle, Volume2, ClipboardList, CheckCircle, CircleDot, Circle, Check } from '@lucide/svelte';
   import { onMount, onDestroy } from 'svelte';
   import { getSession, startSession, stopSession, submitInspection, getParts } from '$lib/api/operator.js';
+  import { connectSSE } from '$lib/api/notifications.js';
 
   // Session state
   let activeSession = $state(null);
@@ -21,6 +23,9 @@
   let cameraConnected = $state(true);
   let todayInspected = $state(0);
   let todayNg = $state(0);
+  let lastCvResult  = $state(null);   // data SSE terakhir dari CV
+  let ngAlertData   = $state(null);   // data NG terbaru untuk overlay
+  let eventSource   = null;           // SSE connection handle
 
   // Loading & error
   let pageLoading = $state(true);
@@ -169,24 +174,59 @@
 
   onMount(() => {
     loadInitialData();
+
+    // Subscribe SSE - terima hasil inspeksi dari CV secara real-time
+    eventSource = connectSSE((eventType, data) => {
+      if (eventType === 'inspection-update') {
+        const mapped = {
+          id:           data.inspectionId,
+          part:         data.partCode || data.idPart || '-',
+          partName:     data.partName || '-',
+          status:       (data.status === 'OK' || data.status === 'GOOD') ? 'OK' : 'NG',
+          time:         new Date(data.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+          dimensions:   data.nilaiDimensi || {},
+          operatorName: data.operatorName || '-',
+          sessionId:    data.sessionId || '-',
+          batchId:      data.batchId   || null,
+          matchedRef:   data.matchedRef || '-',
+          shape:        data.shape || '-',
+          fromCV:       true,
+        };
+        recentInspections = [mapped, ...recentInspections.slice(0, 19)];
+        todayInspected++;
+        measurements = mapped.dimensions;
+        resultStatus  = mapped.status;
+        hasResult     = true;
+        lastCvResult  = mapped;
+        if (mapped.status === 'NG') todayNg++;
+      }
+      if (eventType === 'ng-alert') {
+        ngAlertData   = data;
+        showNgOverlay = true;
+        playAlarm();
+      }
+    });
+  });
+  onDestroy(() => {
+    eventSource?.close();
   });
 </script>
 
 <svelte:head>
-  <title>{$t('operator.live_camera')} — EPSON QC</title>
+  <title>{$t('operator.live_camera')} - EPSON QC</title>
 </svelte:head>
 
 <!-- NG Full-screen overlay -->
 {#if showNgOverlay}
   <div class="ng-overlay animate-fade-in">
     <div class="ng-content">
-      <div class="ng-header-bar">{$t('operator.ng_alert_title')}</div>
+      <div class="ng-header-bar"><AlertTriangle size={28} strokeWidth={2.5} />{$t('operator.ng_alert_title')}</div>
       <div class="ng-body">
         <div class="ng-big-text">NG</div>
-        <p class="ng-alarm">{$t('operator.ng_alarm')}</p>
+        <p class="ng-alarm"><Volume2 size={22} />{$t('operator.ng_alarm')}</p>
 
         <div class="sop-box">
-          <p class="sop-title">{$t('operator.sop_title')}</p>
+          <p class="sop-title"><ClipboardList size={16} />{$t('operator.sop_title')}</p>
           <p>{$t('operator.sop_1')}</p>
           <p>{$t('operator.sop_2')}</p>
           <p>{$t('operator.sop_3')}</p>
@@ -194,7 +234,7 @@
         </div>
 
         <button class="btn btn-primary btn-lg confirm-btn" onclick={confirmNgAndContinue}>
-          {$t('operator.confirm_next')}
+          <CheckCircle size={20} />{$t('operator.confirm_next')}
         </button>
       </div>
     </div>
@@ -216,12 +256,12 @@
     <div class="session-bar">
       <div class="session-info">
         {#if activeSession}
-          <span class="session-badge active">● Sesi Aktif: <strong>{activeSession.sessionId}</strong></span>
+          <span class="session-badge active"><CircleDot size={14} /> Sesi Aktif: <strong>{activeSession.sessionId}</strong></span>
           <button class="btn btn-secondary" onclick={handleStopSession} disabled={sessionLoading}>
             {$t('operator.stop_session')}
           </button>
         {:else}
-          <span class="session-badge inactive">○ {$t('operator.no_session')}</span>
+          <span class="session-badge inactive"><Circle size={14} /> {$t('operator.no_session')}</span>
           <button class="btn btn-primary" onclick={handleStartSession} disabled={sessionLoading}>
             {$t('operator.start_session')}
           </button>
@@ -274,7 +314,7 @@
           {#if inspecting}
             <span class="spinner"></span> {$t('operator.inspecting')}
           {:else}
-            {$t('operator.inspect_btn')}
+            <Scan size={22} /> {$t('operator.inspect_btn')}
           {/if}
         </button>
       </div>
@@ -289,7 +329,7 @@
               <div class="measure-row">
                 <span class="measure-label">{key}</span>
                 <span class="measure-value">{val} mm</span>
-                <span class="measure-check">✓</span>
+                <span class="measure-check"><Check size={16} /></span>
               </div>
             {/each}
           </div>
@@ -398,6 +438,9 @@
     gap: var(--sp-3);
   }
   .session-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-size: var(--fs-base);
     font-weight: var(--fw-medium);
   }
@@ -676,6 +719,31 @@
   }
   .history-part { flex: 1; }
   .history-time { color: var(--clr-text-dim); font-size: var(--fs-xs); }
+  .from-cv { border-left: 3px solid var(--clr-accent); }
+  .cv-badge {
+    display: inline-block;
+    padding: 0 4px;
+    background: var(--clr-accent);
+    color: #fff;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: var(--fw-bold);
+    vertical-align: middle;
+    margin-left: 4px;
+  }
+  .history-meta {
+    flex: 1;
+    font-size: var(--fs-xs);
+    color: var(--clr-text-dim);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .history-session {
+    font-family: 'Courier New', monospace;
+    font-size: 9px;
+    opacity: 0.7;
+  }
 
   /* Status Bar */
   .status-bar {
@@ -710,6 +778,10 @@
     text-align: center;
   }
   .ng-header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
     font-size: var(--fs-2xl);
     font-weight: var(--fw-bold);
     color: #fff;
@@ -726,6 +798,10 @@
     text-shadow: 0 0 40px rgba(255,255,255,0.5);
   }
   .ng-alarm {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
     font-size: var(--fs-lg);
     margin-bottom: var(--sp-6);
     opacity: 0.9;
@@ -762,3 +838,4 @@
     .camera-placeholder { min-height: 300px; }
   }
 </style>
+
