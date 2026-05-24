@@ -91,20 +91,6 @@ src/
 
 ---
 
-## 🧪 Pengujian (Testing)
-
-Proyek ini menggunakan **Playwright** untuk pengujian end-to-end guna memastikan semua alur (Admin, Operator, Manager) berjalan sempurna:
-
-```bash
-# Jalankan semua test
-npx playwright test
-
-# Lihat laporan test
-npx playwright show-report
-```
-
----
-
 ## 📄 Lisensi
 
 Hak Cipta © 2026 **Epsight Metrics Team**. Seluruh hak cipta dilindungi undang-undang.
