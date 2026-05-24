@@ -4,8 +4,8 @@ import { api } from './client.js';
 /**
  * Get inspection list with filters and pagination.
  */
-export async function getInspections(params = {}) {
-  return api.get('/audit/inspections', params);
+export async function getInspections(params = {}, options = {}) {
+  return api.get('/audit/inspections', params, options);
 }
 
 /**

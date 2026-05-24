@@ -1,7 +1,8 @@
 <script>
   import { t } from '$lib/i18n.js';
   import { getInspections } from '$lib/api/audit.js';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { cache } from '$lib/stores/cache.js';
   import { AlertTriangle, ShieldCheck, ShieldAlert } from '@lucide/svelte';
 
   let records = $state([]);
@@ -24,30 +25,38 @@
   let warningCount = $derived(records.filter(r => r.integrity === 'warning').length);
   let integrityRate = $derived(totalRecords > 0 ? ((validCount / totalRecords) * 100).toFixed(1) : '0');
 
+  let abortController;
+
   async function fetchIntegrity() {
+    if (abortController) {
+      abortController.abort();
+    }
+    abortController = new AbortController();
+
     loading = true;
     error = '';
     try {
       const params = { limit: 1000 };
       if (dateFrom) params.dateFrom = `${dateFrom}T00:00:00`;
       if (dateTo) params.dateTo = `${dateTo}T23:59:59`;
-      const result = await getInspections(params);
+
+      const cacheKey = `auditor_integrity_${JSON.stringify(params)}`;
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        records = cached;
+        loading = false;
+        return;
+      }
+
+      const result = await getInspections(params, { signal: abortController.signal });
       const inspections = result.data || [];
       
-      // Map inspections to integrity records
-      records = inspections.map(item => {
-        // Use hash from backend if available
+      const mapped = inspections.map(item => {
         const hasHash = item.hash && item.hash !== null;
-        
-        // Determine integrity status
         let integrity = 'valid';
-        
         if (!hasHash) {
-          // Legacy data without hash
           integrity = 'warning';
         }
-        // Note: Real validation should use /api/audit/validate-integrity endpoint
-        // For now, we just check if hash exists
         
         return {
           id: item.id,
@@ -62,12 +71,23 @@
           hasHash,
         };
       });
+
+      records = mapped;
+      cache.set(cacheKey, mapped);
     } catch (err) {
+      if (err.name === 'AbortError') return;
       error = err.message;
     } finally {
+      if (abortController && abortController.signal.aborted) return;
       loading = false;
     }
   }
+
+  onDestroy(() => {
+    if (abortController) {
+      abortController.abort();
+    }
+  });
 
   function setQuickFilter(type) {
     isQuickFilterActive = true;

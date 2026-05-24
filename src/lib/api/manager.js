@@ -1,12 +1,8 @@
 // QC Manager API — KPI, trends, inspections, alerts, export
 import { api } from './client.js';
 
-/**
- * Get KPI summary data.
- * @param {object} params - { dateFrom?, dateTo? }
- */
-export async function getKpi(params = {}) {
-  return api.get('/qcmanager/kpi', params);
+export async function getKpi(params = {}, options = {}) {
+  return api.get('/qcmanager/kpi', params, options);
 }
 
 /**
@@ -14,23 +10,23 @@ export async function getKpi(params = {}) {
  * @param {string} period - 'day' | 'week' | 'month'
  * @param {object} params - Additional params like dateFrom, dateTo
  */
-export async function getTrends(period = 'day', params = {}) {
+export async function getTrends(period = 'day', params = {}, options = {}) {
   // If dateFrom and dateTo provided, backend will ignore period
-  return api.get('/qcmanager/trends', { period, ...params });
+  return api.get('/qcmanager/trends', { period, ...params }, options);
 }
 
 /**
  * Get inspection list with filters and pagination.
  */
-export async function getInspections(params = {}) {
-  return api.get('/qcmanager/inspections', params);
+export async function getInspections(params = {}, options = {}) {
+  return api.get('/qcmanager/inspections', params, options);
 }
 
 /**
  * Get NG alert summary.
  */
-export async function getAlertSummary(params = {}) {
-  return api.get('/qcmanager/alert-summary', params);
+export async function getAlertSummary(params = {}, options = {}) {
+  return api.get('/qcmanager/alert-summary', params, options);
 }
 
 /**

@@ -2,7 +2,8 @@
   import { t } from '$lib/i18n.js';
   import { Download, FileText } from '@lucide/svelte';
   import { getInspections, exportData } from '$lib/api/manager.js';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { cache } from '$lib/stores/cache.js';
 
   let history = $state([]);
   let filterPart = $state('');
@@ -18,24 +19,34 @@
   let error = $state('');
 
   let totalPages = $derived(Math.ceil(total / limit) || 1);
+  let abortController;
 
   async function fetchHistory() {
+    if (abortController) {
+      abortController.abort();
+    }
+    abortController = new AbortController();
+
     loading = true;
     error = '';
     try {
       const params = { page, limit };
       if (filterPart) params.partName = filterPart;
       if (filterStatus) params.status = filterStatus;
-      if (dateFrom) {
-        // Tambahkan waktu awal hari untuk dateFrom
-        params.dateFrom = `${dateFrom}T00:00:00`;
+      if (dateFrom) params.dateFrom = `${dateFrom}T00:00:00`;
+      if (dateTo) params.dateTo = `${dateTo}T23:59:59`;
+
+      const cacheKey = `manager_history_${JSON.stringify(params)}`;
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        history = cached.history;
+        total = cached.total;
+        loading = false;
+        return;
       }
-      if (dateTo) {
-        // Tambahkan waktu akhir hari untuk dateTo
-        params.dateTo = `${dateTo}T23:59:59`;
-      }
-      const result = await getInspections(params);
-      history = (result.data || []).map(item => ({
+
+      const result = await getInspections(params, { signal: abortController.signal });
+      const mapped = (result.data || []).map(item => ({
         id: item.id,
         timestamp: new Date(item.timestamp).toLocaleString('id-ID'),
         partName: item.part?.partName || '-',
@@ -46,13 +57,24 @@
         operator: item.operator?.name || '-',
         configVersion: item.configVersion || '-',
       }));
+      history = mapped;
       total = result.total || 0;
+
+      cache.set(cacheKey, { history: mapped, total: result.total || 0 });
     } catch (err) {
+      if (err.name === 'AbortError') return;
       error = err.message;
     } finally {
+      if (abortController && abortController.signal.aborted) return;
       loading = false;
     }
   }
+
+  onDestroy(() => {
+    if (abortController) {
+      abortController.abort();
+    }
+  });
 
   function toggleExpand(id) { expandedId = expandedId === id ? null : id; }
 

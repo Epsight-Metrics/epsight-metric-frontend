@@ -145,22 +145,24 @@ function buildQuery(params) {
 
 // Convenience methods
 export const api = {
-  get: (endpoint, params) => apiFetch(`${endpoint}${buildQuery(params)}`),
+  get: (endpoint, params, options) => apiFetch(`${endpoint}${buildQuery(params)}`, options),
 
-  post: (endpoint, body) =>
+  post: (endpoint, body, options) =>
     apiFetch(endpoint, {
       method: 'POST',
       body: body ? JSON.stringify(body) : undefined,
+      ...options,
     }),
 
-  put: (endpoint, body) =>
+  put: (endpoint, body, options) =>
     apiFetch(endpoint, {
       method: 'PUT',
       body: JSON.stringify(body),
+      ...options,
     }),
 
-  delete: (endpoint, params) =>
-    apiFetch(`${endpoint}${buildQuery(params)}`, { method: 'DELETE' }),
+  delete: (endpoint, params, options) =>
+    apiFetch(`${endpoint}${buildQuery(params)}`, { method: 'DELETE', ...options }),
 
-  download: (endpoint, params) => apiFetch(`${endpoint}${buildQuery(params)}`),
+  download: (endpoint, params, options) => apiFetch(`${endpoint}${buildQuery(params)}`, options),
 };

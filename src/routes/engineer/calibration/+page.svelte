@@ -1,6 +1,8 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { getCalibration, saveCalibration } from '$lib/api/engineer.js';
+  import { cache } from '$lib/stores/cache.js';
+  import { isAuthenticated } from '$lib/stores/auth.js';
   import { Sliders, Ruler, Eye, Crop, AlertTriangle, Info, Save, Check } from '@lucide/svelte';
 
   let loading = $state(true);
@@ -22,10 +24,32 @@
 
   // ROI helper - bind ke input terpisah
   let roi = $state({ x1: 0.20, y1: 0.10, x2: 0.80, y2: 0.90 });
+  let abortController;
 
-  onMount(async () => {
+  async function loadCalibration() {
+    if (!$isAuthenticated) return;
+
+    if (abortController) {
+      abortController.abort();
+    }
+    abortController = new AbortController();
+
+    loading = true;
+    error = '';
+
+    const cacheKey = 'engineer_calibration_config';
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      cfg = cached.cfg;
+      roi = cached.roi;
+      lastUpdatedBy = cached.lastUpdatedBy;
+      lastUpdatedAt = cached.lastUpdatedAt;
+      loading = false;
+      return;
+    }
+
     try {
-      const data = await getCalibration();
+      const data = await getCalibration({ signal: abortController.signal });
       cfg.pixelPerMm      = data.pixelPerMm;
       cfg.toleranceMm     = data.toleranceMm;
       cfg.contourThresh   = data.contourThresh;
@@ -40,10 +64,29 @@
       }
       lastUpdatedBy = data.updatedByUser?.name || '-';
       lastUpdatedAt = data.updatedAt ? new Date(data.updatedAt).toLocaleString('id-ID') : '-';
+
+      cache.set(cacheKey, {
+        cfg: { ...cfg },
+        roi: { ...roi },
+        lastUpdatedBy,
+        lastUpdatedAt
+      });
     } catch (err) {
+      if (err.name === 'AbortError') return;
       error = err.message;
     } finally {
+      if (abortController && abortController.signal.aborted) return;
       loading = false;
+    }
+  }
+
+  onMount(() => {
+    loadCalibration();
+  });
+
+  onDestroy(() => {
+    if (abortController) {
+      abortController.abort();
     }
   });
 
@@ -58,6 +101,15 @@
       });
       saved = true;
       lastUpdatedAt = new Date().toLocaleString('id-ID');
+      
+      // Update cache upon successful save
+      cache.set('engineer_calibration_config', {
+        cfg: { ...cfg },
+        roi: { ...roi },
+        lastUpdatedBy: lastUpdatedBy || 'Anda',
+        lastUpdatedAt
+      });
+
       setTimeout(() => (saved = false), 3000);
     } catch (err) {
       error = err.message;

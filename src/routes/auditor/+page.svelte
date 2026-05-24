@@ -2,7 +2,8 @@
   import { t } from '$lib/i18n.js';
   import { Download, FileText, Search, Camera, BarChart2 } from '@lucide/svelte';
   import { getInspections, exportData } from '$lib/api/audit.js';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { cache } from '$lib/stores/cache.js';
 
   let inspections = $state([]);
   let page = $state(1);
@@ -20,8 +21,14 @@
   let showDetailModal = $state(false);
 
   let totalPages = $derived(Math.ceil(total / limit) || 1);
+  let abortController;
 
   async function fetchInspections() {
+    if (abortController) {
+      abortController.abort();
+    }
+    abortController = new AbortController();
+
     loading = true;
     error = '';
     try {
@@ -31,8 +38,18 @@
       if (filterStatus) params.status = filterStatus;
       if (dateFrom) params.dateFrom = `${dateFrom}T00:00:00`;
       if (dateTo) params.dateTo = `${dateTo}T23:59:59`;
-      const result = await getInspections(params);
-      inspections = (result.data || []).map(item => ({
+
+      const cacheKey = `auditor_logs_${JSON.stringify(params)}`;
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        inspections = cached.inspections;
+        total = cached.total;
+        loading = false;
+        return;
+      }
+
+      const result = await getInspections(params, { signal: abortController.signal });
+      const mapped = (result.data || []).map(item => ({
         id: item.id,
         timestamp: new Date(item.timestamp).toLocaleString('id-ID'),
         rawTimestamp: item.timestamp,
@@ -48,13 +65,24 @@
         idPart: item.idPart,
         matchedRef: item.matchedRef,
       }));
+      inspections = mapped;
       total = result.total || 0;
+
+      cache.set(cacheKey, { inspections: mapped, total: result.total || 0 });
     } catch (err) {
+      if (err.name === 'AbortError') return;
       error = err.message;
     } finally {
+      if (abortController && abortController.signal.aborted) return;
       loading = false;
     }
   }
+
+  onDestroy(() => {
+    if (abortController) {
+      abortController.abort();
+    }
+  });
 
   async function handleExport(format) {
     try {

@@ -1,7 +1,8 @@
 <script>
   import { t } from '$lib/i18n.js';
   import { getInspections } from '$lib/api/manager.js';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { cache } from '$lib/stores/cache.js';
 
   let alerts = $state([]);
   let filterPart = $state('');
@@ -10,26 +11,34 @@
   let activeQuickFilter = $state('');
   let loading = $state(true);
   let error = $state('');
+  let abortController;
 
   async function fetchAlerts() {
+    if (abortController) {
+      abortController.abort();
+    }
+    abortController = new AbortController();
+
     loading = true;
     error = '';
     try {
       const params = { limit: 100, status: 'NG' };
       if (filterPart) params.partName = filterPart;
-      if (dateFrom) {
-        // Tambahkan waktu awal hari untuk dateFrom
-        params.dateFrom = `${dateFrom}T00:00:00`;
+      if (dateFrom) params.dateFrom = `${dateFrom}T00:00:00`;
+      if (dateTo) params.dateTo = `${dateTo}T23:59:59`;
+
+      const cacheKey = `manager_alerts_${JSON.stringify(params)}`;
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        alerts = cached;
+        loading = false;
+        return;
       }
-      if (dateTo) {
-        // Tambahkan waktu akhir hari untuk dateTo
-        params.dateTo = `${dateTo}T23:59:59`;
-      }
-      
+
       console.log('Fetching alerts with params:', params);
-      const result = await getInspections(params);
+      const result = await getInspections(params, { signal: abortController.signal });
       console.log('API result:', result);
-      alerts = (result.data || []).map(item => ({
+      const mapped = (result.data || []).map(item => ({
         id: item.id,
         timestamp: new Date(item.timestamp).toLocaleString('id-ID'),
         partName: item.part?.partName || '-',
@@ -38,12 +47,23 @@
         operator: item.operator?.name || '-',
         dimensions: item.nilaiDimensi || {},
       }));
+
+      alerts = mapped;
+      cache.set(cacheKey, mapped);
     } catch (err) {
+      if (err.name === 'AbortError') return;
       error = err.message;
     } finally {
+      if (abortController && abortController.signal.aborted) return;
       loading = false;
     }
   }
+
+  onDestroy(() => {
+    if (abortController) {
+      abortController.abort();
+    }
+  });
 
   function setQuickFilter(type) {
     isQuickFilterActive = true;

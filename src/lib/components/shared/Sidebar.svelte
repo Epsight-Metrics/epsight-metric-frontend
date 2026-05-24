@@ -8,7 +8,7 @@
 
   async function handleLogout() {
     if (confirm($t('auth.logout_confirm'))) {
-      auth.logout();
+      await auth.logout();
       goto('/login');
     }
   }

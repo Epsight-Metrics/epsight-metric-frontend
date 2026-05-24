@@ -2,6 +2,8 @@
   import { t } from '$lib/i18n.js';
   import { getKpi, getTrends, getInspections } from '$lib/api/manager.js';
   import { onMount, onDestroy } from 'svelte';
+  import { cache } from '$lib/stores/cache.js';
+  import { isAuthenticated } from '$lib/stores/auth.js';
 
   let kpi = $state(null);
   let trendData = $state({ labels: [], values: [] });
@@ -15,93 +17,12 @@
   let lastUpdated = $state('');
   let refreshInterval;
 
-  async function fetchKpi() {
-    try {
-      const params = {};
-      if (dateFrom) params.dateFrom = dateFrom;
-      if (dateTo) params.dateTo = dateTo;
-      
-      const data = await getKpi(params);
-      kpi = {
-        totalInspected: data.total,
-        okCount: data.okCount,
-        ngCount: data.ngCount,
-        okRate: parseFloat(data.okRate),
-        ngRate: parseFloat(data.ngRate),
-        throughput: data.throughputPerHour,
-      };
-    } catch (err) {
-      error = err.message;
-    }
-  }
-
   let selectedPeriod = $state(null);
   let selectedDetail = $state(null);
 
   let maxVendorRate = $derived(Math.max(...vendors.map(v => v.rate), 1));
   let maxDimCount = $derived(Math.max(...dimFailures.map(d => d.count), 1));
   let maxNgRate = $derived(Math.max(...trendData.values, 5));
-
-  async function fetchTrends() {
-    try {
-      let params = {};
-      let period = 'day';
-      
-      // Determine period based on date range
-      if (dateFrom && dateTo) {
-        const daysDiff = Math.ceil((new Date(dateTo) - new Date(dateFrom)) / (1000 * 60 * 60 * 24));
-        
-        // Choose appropriate period to get enough data from backend
-        if (daysDiff <= 1) {
-          period = 'day'; // hourly data for 1 day
-        } else if (daysDiff <= 7) {
-          period = 'week'; // daily data for up to 7 days
-        } else {
-          period = 'month'; // weekly data for longer ranges
-        }
-        
-        params.dateFrom = dateFrom;
-        params.dateTo = dateTo;
-      }
-      
-      console.log('Fetching trends with params:', { period, ...params });
-      const raw = await getTrends(period, params);
-      console.log('Trends response (raw):', raw);
-      
-      // Filter di frontend untuk memastikan data sesuai range
-      let filteredData = raw;
-      if (dateFrom && dateTo) {
-        const startDate = new Date(dateFrom + 'T00:00:00');
-        const endDate = new Date(dateTo + 'T23:59:59');
-        
-        filteredData = raw.filter(item => {
-          const itemDate = new Date(item.period);
-          return itemDate >= startDate && itemDate <= endDate;
-        });
-        
-        console.log('Filtered data:', filteredData);
-      }
-      
-      // Check if single day (show hourly) or multiple days (show daily)
-      const isSingleDay = dateFrom === dateTo;
-      
-      const labels = filteredData.map((item) => {
-        const d = new Date(item.period);
-        if (isSingleDay) {
-          return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-        } else {
-          return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-        }
-      });
-      const values = filteredData.map((item) =>
-        item.total > 0 ? +((item.ng_count / item.total) * 100).toFixed(1) : 0
-      );
-      trendData = { labels, values, raw: filteredData };
-    } catch (err) {
-      console.error('Trends error:', err);
-      error = err.message;
-    }
-  }
 
   function selectBar(index) {
     selectedPeriod = index;
@@ -119,14 +40,98 @@
     };
   }
 
-  async function fetchVendorNg() {
+  let abortController;
+
+  async function loadAll() {
+    if (!$isAuthenticated) {
+      if (refreshInterval) clearInterval(refreshInterval);
+      return;
+    }
+
+    if (abortController) {
+      abortController.abort();
+    }
+    abortController = new AbortController();
+
+    loading = true;
+    error = '';
+    
+    const params = {};
+    if (dateFrom) params.dateFrom = dateFrom;
+    if (dateTo) params.dateTo = dateTo;
+    
+    const cacheKey = `manager_overview_${JSON.stringify(params)}`;
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      kpi = cached.kpi;
+      trendData = cached.trendData;
+      vendors = cached.vendors;
+      dimFailures = cached.dimFailures;
+      lastUpdated = cached.lastUpdated;
+      loading = false;
+      return;
+    }
+
     try {
-      const params = { limit: 500 };
-      if (dateFrom) params.dateFrom = dateFrom;
-      if (dateTo) params.dateTo = dateTo;
+      const [kpiRes, trendsRes, vendorNgRes] = await Promise.all([
+        getKpi(params, { signal: abortController.signal }),
+        (async () => {
+          let period = 'day';
+          let trendParams = {};
+          if (dateFrom && dateTo) {
+            const daysDiff = Math.ceil((new Date(dateTo) - new Date(dateFrom)) / (1000 * 60 * 60 * 24));
+            if (daysDiff <= 1) {
+              period = 'day';
+            } else if (daysDiff <= 7) {
+              period = 'week';
+            } else {
+              period = 'month';
+            }
+            trendParams.dateFrom = dateFrom;
+            trendParams.dateTo = dateTo;
+          }
+          return getTrends(period, trendParams, { signal: abortController.signal });
+        })(),
+        getInspections({ limit: 500, ...params }, { signal: abortController.signal })
+      ]);
+
+      // Map KPI data
+      kpi = {
+        totalInspected: kpiRes.total,
+        okCount: kpiRes.okCount,
+        ngCount: kpiRes.ngCount,
+        okRate: parseFloat(kpiRes.okRate),
+        ngRate: parseFloat(kpiRes.ngRate),
+        throughput: kpiRes.throughputPerHour,
+      };
+
+      // Map Trends data
+      let filteredData = trendsRes;
+      if (dateFrom && dateTo) {
+        const startDate = new Date(dateFrom + 'T00:00:00');
+        const endDate = new Date(dateTo + 'T23:59:59');
+        filteredData = trendsRes.filter(item => {
+          const itemDate = new Date(item.period);
+          return itemDate >= startDate && itemDate <= endDate;
+        });
+      }
       
-      const result = await getInspections(params);
-      const inspections = result.data || [];
+      const isSingleDay = dateFrom === dateTo;
+      const labels = filteredData.map((item) => {
+        const d = new Date(item.period);
+        if (isSingleDay) {
+          return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        } else {
+          return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+        }
+      });
+      const values = filteredData.map((item) =>
+        item.total > 0 ? +((item.ng_count / item.total) * 100).toFixed(1) : 0
+      );
+      trendData = { labels, values, raw: filteredData };
+
+      // Map Vendors and Dimensions failures
+      const inspections = vendorNgRes.data || [];
       const vendorMap = {};
       const dimMap = {};
       
@@ -155,17 +160,23 @@
         .map(([dim, count]) => ({ dim, count }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 5);
-    } catch (err) {
-      error = err.message;
-    }
-  }
 
-  async function loadAll() {
-    loading = true;
-    error = '';
-    await Promise.all([fetchKpi(), fetchTrends(), fetchVendorNg()]);
-    lastUpdated = new Date().toLocaleTimeString('id-ID');
-    loading = false;
+      lastUpdated = new Date().toLocaleTimeString('id-ID');
+
+      cache.set(cacheKey, {
+        kpi,
+        trendData,
+        vendors,
+        dimFailures,
+        lastUpdated
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      error = err.message;
+    } finally {
+      if (abortController && abortController.signal.aborted) return;
+      loading = false;
+    }
   }
 
   function applyFilter() {
@@ -229,7 +240,12 @@
     refreshInterval = setInterval(loadAll, 30_000);
   });
 
-  onDestroy(() => clearInterval(refreshInterval));
+  onDestroy(() => {
+    if (refreshInterval) clearInterval(refreshInterval);
+    if (abortController) {
+      abortController.abort();
+    }
+  });
 </script>
 
 <svelte:head><title>{$t('manager.overview')} — EPSON QC</title></svelte:head>
