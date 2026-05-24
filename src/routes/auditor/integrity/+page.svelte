@@ -2,10 +2,22 @@
   import { t } from '$lib/i18n.js';
   import { getInspections } from '$lib/api/audit.js';
   import { onMount } from 'svelte';
+  import { AlertTriangle, ShieldCheck, ShieldAlert } from '@lucide/svelte';
 
   let records = $state([]);
   let loading = $state(true);
   let error = $state('');
+
+  let dateFrom = $state('');
+  let dateTo = $state('');
+  let activeQuickFilter = $state('');
+  let isQuickFilterActive = false;
+
+  // Pagination states
+  let page = $state(1);
+  let limit = $state(10);
+  let totalPages = $derived(Math.ceil(records.length / limit) || 1);
+  let paginatedRecords = $derived(records.slice((page - 1) * limit, page * limit));
 
   let totalRecords = $derived(records.length);
   let validCount = $derived(records.filter(r => r.integrity === 'valid').length);
@@ -16,7 +28,10 @@
     loading = true;
     error = '';
     try {
-      const result = await getInspections({ limit: 100 });
+      const params = { limit: 1000 };
+      if (dateFrom) params.dateFrom = `${dateFrom}T00:00:00`;
+      if (dateTo) params.dateTo = `${dateTo}T23:59:59`;
+      const result = await getInspections(params);
       const inspections = result.data || [];
       
       // Map inspections to integrity records
@@ -54,8 +69,56 @@
     }
   }
 
+  function setQuickFilter(type) {
+    isQuickFilterActive = true;
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    dateTo = `${year}-${month}-${day}`;
+    
+    if (type === 'today') {
+      dateFrom = dateTo;
+      activeQuickFilter = 'today';
+    } else if (type === 'week') {
+      const weekAgo = new Date(today);
+      weekAgo.setDate(today.getDate() - 7);
+      const wYear = weekAgo.getFullYear();
+      const wMonth = String(weekAgo.getMonth() + 1).padStart(2, '0');
+      const wDay = String(weekAgo.getDate()).padStart(2, '0');
+      dateFrom = `${wYear}-${wMonth}-${wDay}`;
+      activeQuickFilter = 'week';
+    } else if (type === 'month') {
+      const monthAgo = new Date(today);
+      monthAgo.setMonth(today.getMonth() - 1);
+      const mYear = monthAgo.getFullYear();
+      const mMonth = String(monthAgo.getMonth() + 1).padStart(2, '0');
+      const mDay = String(monthAgo.getDate()).padStart(2, '0');
+      dateFrom = `${mYear}-${mMonth}-${mDay}`;
+      activeQuickFilter = 'month';
+    }
+  }
+
+  function goToPage(p) {
+    page = p;
+  }
+
   onMount(() => {
     fetchIntegrity();
+  });
+
+  let searchTimer;
+  $effect(() => {
+    dateFrom; dateTo;
+    if (!isQuickFilterActive && activeQuickFilter) {
+      activeQuickFilter = '';
+    }
+    isQuickFilterActive = false;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      page = 1;
+      fetchIntegrity();
+    }, 300);
   });
 </script>
 
@@ -66,10 +129,34 @@
   <p class="subtitle">
     Verifikasi integritas data inspeksi menggunakan SHA256 hash. 
     {#if records.some(r => !r.hasHash)}
-      <span class="info-badge">⚠️ Beberapa data legacy belum memiliki hash</span>
+      <span class="info-badge">
+        <AlertTriangle size={12} class="inline-icon" />
+        Beberapa data legacy belum memiliki hash
+      </span>
     {/if}
   </p>
 
+  <div class="filter-row">
+    <div class="quick-filters">
+      <button class="quick-btn" class:active={activeQuickFilter === 'today'} onclick={() => setQuickFilter('today')}>Hari Ini</button>
+      <button class="quick-btn" class:active={activeQuickFilter === 'week'} onclick={() => setQuickFilter('week')}>Minggu Ini</button>
+      <button class="quick-btn" class:active={activeQuickFilter === 'month'} onclick={() => setQuickFilter('month')}>Bulan Ini</button>
+    </div>
+    <div class="date-filter-group">
+      <label class="date-label">Dari:</label>
+      <input type="date" class="date-input" bind:value={dateFrom} />
+    </div>
+    <div class="date-filter-group">
+      <label class="date-label">Sampai:</label>
+      <input type="date" class="date-input" bind:value={dateTo} />
+    </div>
+  </div>
+
+  {#if dateFrom || dateTo}
+    <div class="date-range-info">
+      Data rentang waktu {dateFrom || '...'} ke {dateTo || '...'}
+    </div>
+  {/if}
   {#if error}
     <div class="error-banner">{error}</div>
   {/if}
@@ -117,7 +204,7 @@
         </tr>
       </thead>
       <tbody>
-        {#each records as record}
+        {#each paginatedRecords as record}
           <tr>
             <td><code>{record.id}</code></td>
             <td>
@@ -132,9 +219,9 @@
             <td>
               <span class="integrity-badge" class:valid={record.integrity === 'valid'} class:warn={record.integrity === 'warning'}>
                 {#if record.hasHash}
-                  ✓ Valid
+                  <ShieldCheck size={13} class="inline-icon" /> Valid
                 {:else}
-                  ⚠ No Hash
+                  <ShieldAlert size={13} class="inline-icon" /> No Hash
                 {/if}
               </span>
             </td>
@@ -146,6 +233,17 @@
       </tbody>
     </table>
   </div>
+
+  <div class="table-footer">
+    <span>{$t('common.showing')} {records.length > 0 ? (page-1)*limit + 1 : 0}-{Math.min(page*limit, records.length)} {$t('common.of')} {records.length}</span>
+    {#if totalPages > 1}
+      <div class="pagination">
+        <button class="btn btn-ghost" disabled={page <= 1} onclick={() => goToPage(page - 1)}>{$t('common.prev')}</button>
+        <span class="page-num">{page}/{totalPages}</span>
+        <button class="btn btn-ghost" disabled={page >= totalPages} onclick={() => goToPage(page + 1)}>{$t('common.next')}</button>
+      </div>
+    {/if}
+  </div>
   {/if}
 </div>
 
@@ -153,13 +251,70 @@
   .page-title { font-size: var(--fs-xl); font-weight: var(--fw-semibold); margin-bottom: var(--sp-2); }
   .subtitle { color: var(--clr-text-dim); font-size: var(--fs-sm); margin-bottom: var(--sp-5); }
   .info-badge { 
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     background: rgba(251, 191, 36, 0.1); 
     color: var(--clr-warning);
-    padding: 2px 8px; 
+    padding: 3px 8px; 
     border-radius: var(--radius-sm); 
     font-size: var(--fs-xs);
     margin-left: var(--sp-2);
+    vertical-align: middle;
+  }
+  .filter-row { display: flex; gap: var(--sp-3); margin-bottom: var(--sp-4); flex-wrap: wrap; align-items: center; }
+  .quick-filters { display: flex; gap: var(--sp-2); }
+  .quick-btn {
+    padding: var(--sp-2) var(--sp-3);
+    font-family: var(--font-family);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-medium);
+    color: var(--clr-text-muted);
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  .quick-btn:hover {
+    background: var(--clr-surface-2);
+    border-color: var(--clr-border-light);
+  }
+  .quick-btn.active {
+    background: var(--clr-accent);
+    color: white;
+    border-color: var(--clr-accent);
+  }
+  .quick-btn:active {
+    transform: scale(0.98);
+  }
+  .date-filter-group { display: flex; align-items: center; gap: var(--sp-2); }
+  .date-label { font-size: var(--fs-sm); color: var(--clr-text-muted); font-weight: var(--fw-medium); white-space: nowrap; }
+  .date-input {
+    padding: var(--sp-2) var(--sp-3);
+    font-family: var(--font-family);
+    font-size: var(--fs-sm);
+    color: var(--clr-text);
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  .date-input:hover { border-color: var(--clr-border-light); }
+  .date-input:focus {
+    outline: none;
+    border-color: var(--clr-accent);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+  .date-range-info {
+    font-size: var(--fs-sm);
+    color: var(--clr-text-muted);
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--clr-surface);
+    border-left: 3px solid var(--clr-accent);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--sp-3);
   }
   .error-banner { padding: var(--sp-3); background: var(--clr-ng-bg); color: var(--clr-ng); border-radius: var(--radius-md); font-size: var(--fs-sm); margin-bottom: var(--sp-4); border: 1px solid rgba(239,68,68,0.2); }
   .loading-state { padding: var(--sp-8); text-align: center; color: var(--clr-text-muted); }
@@ -180,7 +335,24 @@
   .dim { color: var(--clr-text-dim); font-size: var(--fs-xs); }
   code { background: var(--clr-surface-2); padding: 1px 6px; border-radius: 4px; font-size: var(--fs-xs); }
   .hash { color: var(--clr-accent-hover); }
-  .integrity-badge { font-size: var(--fs-xs); font-weight: var(--fw-medium); padding: 2px 8px; border-radius: var(--radius-sm); }
+  .integrity-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-medium);
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+  }
   .integrity-badge.valid { color: var(--clr-ok); background: var(--clr-ok-bg); }
   .integrity-badge.warn { color: var(--clr-warning); background: rgba(251, 191, 36, 0.1); }
+  .integrity-badge :global(.inline-icon), .info-badge :global(.inline-icon) {
+    display: inline-block;
+    vertical-align: middle;
+  }
+  .table-footer { margin-top: var(--sp-3); font-size: var(--fs-xs); color: var(--clr-text-dim); display: flex; justify-content: space-between; align-items: center; }
+  .pagination { display: flex; align-items: center; gap: var(--sp-2); }
+  .page-num { font-weight: var(--fw-medium); color: var(--clr-text-muted); }
+  .page { display: flex; flex-direction: column; flex: 1; overflow: hidden; height: 100%; }
+  .table-container { flex: 1; overflow-y: auto; }
 </style>

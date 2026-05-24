@@ -14,6 +14,7 @@
   let hasResult = $state(false);
   let resultStatus = $state('');
   let showNgOverlay = $state(false);
+  let manualInspectionId = $state(null);  // Track manual inspection ID
 
   // Data
   let measurements = $state({});
@@ -46,7 +47,11 @@
       }
 
       activeSession = sessionData.activeSession || null;
-      recentInspections = (sessionData.recent || []).map(mapInspection);
+      const initialInspections = (sessionData.recent || []).map(mapInspection);
+      // Deduplikasi berdasarkan ID
+      const uniqueMap = new Map();
+      initialInspections.forEach(item => uniqueMap.set(item.id, item));
+      recentInspections = Array.from(uniqueMap.values());
 
       // Count today's stats from recent inspections
       const today = new Date().toDateString();
@@ -127,6 +132,7 @@
       });
 
       const mapped = mapInspection(result);
+      manualInspectionId = mapped.id;  // Save manual inspection ID
       measurements = dims;
       resultStatus = mapped.status;
       hasResult = true;
@@ -143,6 +149,8 @@
       error = err.message;
     } finally {
       inspecting = false;
+      // Clear manual ID after 2 seconds to allow SSE updates
+      setTimeout(() => { manualInspectionId = null; }, 2000);
     }
   }
 
@@ -192,6 +200,10 @@
           shape:        data.shape || '-',
           fromCV:       true,
         };
+        
+        // Skip jika ini adalah hasil dari manual inspection
+        if (mapped.id === manualInspectionId) return;
+        
         // Cek duplikasi berdasarkan ID
         if (!recentInspections.some(item => item.id === mapped.id)) {
           recentInspections = [mapped, ...recentInspections.slice(0, 19)];
@@ -201,6 +213,7 @@
         measurements = mapped.dimensions;
         resultStatus  = mapped.status;
         hasResult     = true;
+        inspecting    = false;  // Reset inspecting state
         lastCvResult  = mapped;
       }
       if (eventType === 'ng-alert') {
@@ -358,7 +371,7 @@
         <div class="history-section">
           <div class="section-label">{$t('operator.session_history')} ({recentInspections.length})</div>
           <div class="history-list">
-            {#each recentInspections as item}
+            {#each recentInspections as item (item.id)}
               <div class="history-row">
                 <span class="history-id">#{item.id}</span>
                 <span class="history-part">{item.part}</span>
@@ -469,6 +482,8 @@
     flex: 1;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
   }
   .inspect-grid {
     flex: 1;
@@ -476,6 +491,8 @@
     grid-template-columns: 3fr 2fr;
     gap: var(--sp-5);
     padding: var(--sp-5);
+    overflow: hidden;
+    min-height: 0;
   }
   .section-label {
     font-family: var(--font-heading);
@@ -492,11 +509,21 @@
     display: flex;
     flex-direction: column;
     gap: var(--sp-3);
+    min-height: 0;
+    overflow: hidden;
   }
-  .camera-feed { position: relative; }
+  .camera-feed { 
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
   .camera-placeholder {
-    aspect-ratio: 4/3;
-    min-height: 400px;
+    flex: 1;
+    width: 100%;
+    min-height: 300px;
+    max-height: 100%;
     border: 2px solid var(--clr-border);
     border-radius: var(--radius-lg);
     position: relative;
@@ -626,6 +653,8 @@
     display: flex;
     flex-direction: column;
     gap: var(--sp-3);
+    min-height: 0;
+    overflow: hidden;
   }
   .measurements {
     display: flex;
@@ -699,11 +728,32 @@
   /* History */
   .history-section {
     margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
   }
   .history-list {
     display: flex;
     flex-direction: column;
     gap: var(--sp-1);
+    overflow-y: auto;
+    max-height: 300px;
+    padding-right: var(--sp-1);
+  }
+  .history-list::-webkit-scrollbar {
+    width: 6px;
+  }
+  .history-list::-webkit-scrollbar-track {
+    background: var(--clr-surface);
+    border-radius: var(--radius-sm);
+  }
+  .history-list::-webkit-scrollbar-thumb {
+    background: var(--clr-border);
+    border-radius: var(--radius-sm);
+  }
+  .history-list::-webkit-scrollbar-thumb:hover {
+    background: var(--clr-text-dim);
   }
   .history-row {
     display: flex;
@@ -837,8 +887,29 @@
   }
 
   @media (max-width: 1024px) {
-    .inspect-grid { grid-template-columns: 1fr; }
-    .camera-placeholder { min-height: 300px; }
+    .inspect-grid { 
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr 1fr;
+    }
+    .camera-placeholder { min-height: 250px; }
+    .history-list { max-height: 200px; }
+  }
+  
+  @media (max-height: 768px) {
+    .session-bar {
+      padding: var(--sp-2) var(--sp-4);
+    }
+    .inspect-grid {
+      padding: var(--sp-3);
+      gap: var(--sp-3);
+    }
+    .camera-placeholder { min-height: 200px; }
+    .history-list { max-height: 150px; }
+    .inspect-btn {
+      min-height: 48px;
+      padding: 12px var(--sp-8);
+      font-size: 1.1rem;
+    }
   }
 </style>
 

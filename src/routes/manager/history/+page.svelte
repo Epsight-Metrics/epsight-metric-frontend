@@ -335,4 +335,6 @@
   .table-footer { margin-top: var(--sp-3); font-size: var(--fs-xs); color: var(--clr-text-dim); display: flex; justify-content: space-between; align-items: center; }
   .pagination { display: flex; align-items: center; gap: var(--sp-2); }
   .page-num { font-weight: var(--fw-medium); color: var(--clr-text-muted); }
+  .page { display: flex; flex-direction: column; flex: 1; overflow: hidden; height: 100%; }
+  .table-container { flex: 1; overflow-y: auto; }
 </style>

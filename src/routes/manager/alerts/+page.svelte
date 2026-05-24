@@ -239,7 +239,7 @@
   }
   .error-banner { padding: var(--sp-3); background: var(--clr-ng-bg); color: var(--clr-ng); border-radius: var(--radius-md); font-size: var(--fs-sm); margin-bottom: var(--sp-4); border: 1px solid rgba(239,68,68,0.2); }
   .loading-state { padding: var(--sp-8); text-align: center; color: var(--clr-text-muted); }
-  .alerts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--sp-4); }
+  .alerts-grid { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--sp-4); align-content: start; }
   .alert-card { background: var(--clr-surface); border: 1px solid var(--clr-border); border-left: 3px solid var(--clr-ng); border-radius: var(--radius-lg); padding: var(--sp-4); }
   .alert-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-3); }
   .alert-icon { display: flex; color: var(--clr-warning); }
@@ -251,4 +251,5 @@
   code { background: var(--clr-surface-2); padding: 1px 6px; border-radius: 4px; font-size: var(--fs-xs); }
   .no-alerts { text-align: center; padding: var(--sp-12); color: var(--clr-text-dim); grid-column: 1 / -1; }
   .no-alerts-icon { font-size: 3rem; display: block; margin-bottom: var(--sp-3); }
+  .page { display: flex; flex-direction: column; flex: 1; overflow: hidden; height: 100%; }
 </style>

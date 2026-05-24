@@ -1,6 +1,6 @@
 <script>
   import { t } from '$lib/i18n.js';
-  import { Download, FileText, Search } from '@lucide/svelte';
+  import { Download, FileText, Search, Camera, BarChart2 } from '@lucide/svelte';
   import { getInspections, exportData } from '$lib/api/audit.js';
   import { onMount } from 'svelte';
 
@@ -217,12 +217,18 @@
             <td><span class="badge" class:badge-ok={item.status === 'OK'} class:badge-ng={item.status === 'NG'}>{item.status}</span></td>
             <td>{item.operator}<br/><span class="dim">{item.operatorUsername}</span></td>
             <td>
-              {#if item.imagePath}
-                <span class="evidence-icon" title="Photo Evidence">📷</span>
-              {/if}
-              {#if Object.keys(item.dimensions).length > 0}
-                <span class="evidence-icon" title="Measurement Data">📊</span>
-              {/if}
+              <div class="evidence-cell">
+                {#if item.imagePath}
+                  <span class="evidence-icon-wrapper" title="Photo Evidence">
+                    <Camera size={15} class="text-blue-500" />
+                  </span>
+                {/if}
+                {#if Object.keys(item.dimensions).length > 0}
+                  <span class="evidence-icon-wrapper" title="Measurement Data">
+                    <BarChart2 size={15} class="text-emerald-500" />
+                  </span>
+                {/if}
+              </div>
             </td>
             <td>
               <button class="btn-icon btn-view" title="View Detail" onclick={() => viewDetail(item)}>
@@ -374,7 +380,32 @@
     border-radius: var(--radius-sm);
     margin-bottom: var(--sp-3);
   }
-  .evidence-icon { font-size: var(--fs-md); margin-right: var(--sp-1); }
+  .evidence-cell { display: flex; gap: var(--sp-1); align-items: center; }
+  .evidence-icon-wrapper {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: var(--radius-md);
+    background: var(--clr-surface-2);
+    border: 1px solid var(--clr-border);
+    transition: all var(--transition-fast);
+  }
+  .evidence-icon-wrapper:hover {
+    background: var(--clr-surface);
+    border-color: var(--clr-border-light);
+    transform: translateY(-1px);
+  }
+  .evidence-icon-wrapper :global(svg) {
+    display: block;
+  }
+  .evidence-icon-wrapper :global(.text-blue-500) {
+    color: #3b82f6;
+  }
+  .evidence-icon-wrapper :global(.text-emerald-500) {
+    color: #10b981;
+  }
   .btn-icon {
     display: flex;
     align-items: center;
@@ -425,4 +456,6 @@
   .evidence-img { width: 100%; max-width: 500px; border-radius: var(--radius-lg); border: 1px solid var(--clr-border); }
   .no-evidence { text-align: center; padding: var(--sp-8); color: var(--clr-text-dim); background: var(--clr-surface-2); border-radius: var(--radius-lg); }
   .no-evidence p { margin-top: var(--sp-2); font-size: var(--fs-sm); }
+  .page { display: flex; flex-direction: column; flex: 1; overflow: hidden; height: 100%; }
+  .table-container { flex: 1; overflow-y: auto; }
 </style>

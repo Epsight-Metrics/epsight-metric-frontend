@@ -23,7 +23,7 @@
 </div>
 
 <style>
-  .manager-layout { min-height: 100vh; display: flex; flex-direction: column; }
-  .manager-body { flex: 1; display: flex; }
-  .manager-main { flex: 1; padding: var(--sp-6); overflow-y: auto; }
+  .manager-layout { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  .manager-body { flex: 1; display: flex; overflow: hidden; }
+  .manager-main { flex: 1; padding: var(--sp-6); display: flex; flex-direction: column; overflow: hidden; }
 </style>

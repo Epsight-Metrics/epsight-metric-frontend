@@ -14,14 +14,17 @@
 
 <style>
   .operator-layout {
-    min-height: 100vh;
+    height: 100vh;
     display: flex;
     flex-direction: column;
     background: var(--clr-bg);
+    overflow: hidden;
   }
   .operator-main {
     flex: 1;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
   }
 </style>

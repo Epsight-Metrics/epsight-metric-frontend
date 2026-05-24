@@ -23,7 +23,7 @@
 </div>
 
 <style>
-  .auditor-layout { min-height: 100vh; display: flex; flex-direction: column; }
-  .auditor-body { flex: 1; display: flex; }
-  .auditor-main { flex: 1; padding: var(--sp-6); overflow-y: auto; }
+  .auditor-layout { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  .auditor-body { flex: 1; display: flex; overflow: hidden; }
+  .auditor-main { flex: 1; padding: var(--sp-6); display: flex; flex-direction: column; overflow: hidden; }
 </style>

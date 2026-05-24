@@ -1,6 +1,7 @@
-﻿<script>
+<script>
   import { onMount } from 'svelte';
   import { getCalibration, saveCalibration } from '$lib/api/engineer.js';
+  import { Sliders, Ruler, Eye, Crop, AlertTriangle, Info, Save, Check } from '@lucide/svelte';
 
   let loading = $state(true);
   let saving  = $state(false);
@@ -71,7 +72,7 @@
 <div class="page animate-fade-in">
   <div class="page-header">
     <div>
-      <h1 class="page-title">⚙️ Kalibrasi Parameter CV</h1>
+      <h1 class="page-title"><Sliders class="inline-icon mr-2 text-primary" size={24} /> Kalibrasi Parameter CV</h1>
       <p class="page-sub">Atur parameter deteksi kamera untuk sistem inspeksi otomatis</p>
     </div>
     {#if lastUpdatedAt !== '-'}
@@ -94,7 +95,7 @@
 
       <!-- SKALA & TOLERANSI -->
       <div class="card">
-        <h3 class="card-title">📏 Skala & Toleransi</h3>
+        <h3 class="card-title"><Ruler class="inline-icon mr-2 text-primary" size={20} /> Skala & Toleransi</h3>
         <div class="form-group">
           <label class="label" for="ppm">Pixel per mm (kalibrasi skala)</label>
           <p class="hint">Rumus: pixel benda / ukuran benda (mm) · Contoh: koin 27mm = 250px → 250/27 = 9.26</p>
@@ -109,7 +110,7 @@
 
       <!-- DETEKSI KONTUR -->
       <div class="card">
-        <h3 class="card-title">🔍 Deteksi Kontur</h3>
+        <h3 class="card-title"><Eye class="inline-icon mr-2 text-primary" size={20} /> Deteksi Kontur</h3>
         <div class="form-group">
           <label class="label" for="thresh">Threshold Binarisasi Awal (10–250)</label>
           <p class="hint">Bisa diubah real-time saat inspeksi dengan tombol +/−</p>
@@ -132,7 +133,7 @@
 
       <!-- ROI -->
       <div class="card">
-        <h3 class="card-title">📐 Area Inspeksi (ROI)</h3>
+        <h3 class="card-title"><Crop class="inline-icon mr-2 text-primary" size={20} /> Area Inspeksi (ROI)</h3>
         <p class="hint mb">Nilai 0.0–1.0 sebagai persentase dari ukuran frame kamera</p>
         <div class="roi-grid">
           <div class="form-group">
@@ -168,7 +169,7 @@
 
       <!-- SISTEM -->
       <div class="card">
-        <h3 class="card-title">⚠️ Sistem & Alert</h3>
+        <h3 class="card-title"><AlertTriangle class="inline-icon mr-2 text-warning" size={20} /> Sistem & Alert</h3>
         <div class="form-group">
           <label class="label" for="warn">Durasi Warning NG (detik)</label>
           <p class="hint">Berapa lama overlay merah berkedip saat ada part NG</p>
@@ -180,7 +181,7 @@
 
         <!-- Info box - bagaimana CV menggunakan config ini -->
         <div class="info-box">
-          <p class="info-title">ℹ️ Cara Kerja</p>
+          <p class="info-title"><Info class="inline-icon mr-2 text-primary" size={16} /> Cara Kerja</p>
           <p>CV program mengambil konfigurasi ini dari server saat startup melalui endpoint publik:</p>
           <code class="endpoint">GET /api/engineer/calibration/public</code>
           <p>Perubahan akan aktif saat CV di-restart berikutnya.</p>
@@ -190,10 +191,14 @@
 
     <div class="save-bar">
       <button class="btn btn-primary btn-lg" onclick={handleSave} disabled={saving}>
-        {#if saving}<span class="spinner"></span> Menyimpan...{:else}💾 Simpan Kalibrasi{/if}
+        {#if saving}
+          <span class="spinner"></span> Menyimpan...
+        {:else}
+          <Save size={16} class="inline-icon mr-2" /> Simpan Kalibrasi
+        {/if}
       </button>
       {#if saved}
-        <span class="saved-msg animate-fade-in">✓ Kalibrasi berhasil disimpan!</span>
+        <span class="saved-msg animate-fade-in"><Check size={16} class="inline-icon mr-2" /> Kalibrasi berhasil disimpan!</span>
       {/if}
     </div>
   {/if}
@@ -394,6 +399,21 @@
     background: var(--clr-ok-bg);
     border-radius: var(--radius-md);
     border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .inline-icon {
+    display: inline-block;
+    vertical-align: middle;
+    margin-top: -2px;
+  }
+  .mr-2 {
+    margin-right: 8px;
+  }
+  .text-primary {
+    color: var(--clr-accent);
+  }
+  .text-warning {
+    color: var(--clr-warning);
   }
 
   @media (max-width: 1024px) {
