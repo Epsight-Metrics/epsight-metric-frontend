@@ -42,6 +42,58 @@
     editingUser ? validatePassword(editingUser.password, editingUser.username, editingUser.name) : { isValid: true, errors: [] }
   );
 
+  let addPasswordChecklist = $derived([
+    {
+      label: "Minimal 8 - 64 karakter",
+      satisfied: addPasswordValidation.criteria.lengthOk,
+    },
+    {
+      label: "Mengandung huruf kapital (A-Z)" + (newUser.password.length >= 12 ? " (Dilonggarkan)" : ""),
+      satisfied: addPasswordValidation.criteria.hasUppercase || newUser.password.length >= 12,
+    },
+    {
+      label: "Mengandung angka (0-9)" + (newUser.password.length >= 12 ? " (Dilonggarkan)" : ""),
+      satisfied: addPasswordValidation.criteria.hasNumber || newUser.password.length >= 12,
+    },
+    {
+      label: "Mengandung simbol/karakter khusus" + (newUser.password.length >= 12 ? " (Dilonggarkan)" : ""),
+      satisfied: addPasswordValidation.criteria.hasSymbol || newUser.password.length >= 12,
+    },
+    {
+      label: newUser.password && addPasswordValidation.errors.some(e => e.includes("username")) ? "Aman dari username (Mengandung username!)"
+             : newUser.password && addPasswordValidation.errors.some(e => e.includes("nama")) ? "Aman dari nama lengkap (Mengandung unsur nama!)"
+             : newUser.password && addPasswordValidation.errors.some(e => e.includes("pasaran")) ? "Aman dari kata pasaran (Mengandung kata pasaran!)"
+             : "Aman dari informasi pribadi & kata pasaran",
+      satisfied: !addPasswordValidation.criteria.isPredictable,
+    }
+  ]);
+
+  let editPasswordChecklist = $derived([
+    {
+      label: "Minimal 8 - 64 karakter",
+      satisfied: editPasswordValidation.criteria.lengthOk,
+    },
+    {
+      label: "Mengandung huruf kapital (A-Z)" + ((editingUser?.password || '').length >= 12 ? " (Dilonggarkan)" : ""),
+      satisfied: editPasswordValidation.criteria.hasUppercase || (editingUser?.password || '').length >= 12,
+    },
+    {
+      label: "Mengandung angka (0-9)" + ((editingUser?.password || '').length >= 12 ? " (Dilonggarkan)" : ""),
+      satisfied: editPasswordValidation.criteria.hasNumber || (editingUser?.password || '').length >= 12,
+    },
+    {
+      label: "Mengandung simbol/karakter khusus" + ((editingUser?.password || '').length >= 12 ? " (Dilonggarkan)" : ""),
+      satisfied: editPasswordValidation.criteria.hasSymbol || (editingUser?.password || '').length >= 12,
+    },
+    {
+      label: editingUser?.password && editPasswordValidation.errors.some(e => e.includes("username")) ? "Aman dari username (Mengandung username!)"
+             : editingUser?.password && editPasswordValidation.errors.some(e => e.includes("nama")) ? "Aman dari nama lengkap (Mengandung unsur nama!)"
+             : editingUser?.password && editPasswordValidation.errors.some(e => e.includes("pasaran")) ? "Aman dari kata pasaran (Mengandung kata pasaran!)"
+             : "Aman dari informasi pribadi & kata pasaran",
+      satisfied: !editPasswordValidation.criteria.isPredictable,
+    }
+  ]);
+
   const roles = getAllBackendRoles();
 
   let totalPages = $derived(Math.ceil(total / limit) || 1);
@@ -403,20 +455,21 @@
               {/if}
             </button>
           </div>
-          {#if newUser.password}
-            <div class="password-feedback animate-fade-in">
-              {#each addPasswordValidation.errors as err}
-                <div class="feedback-item error">
-                  <span class="icon">❌</span> {err}
-                </div>
-              {/each}
-              {#if addPasswordValidation.errors.length === 0}
-                <div class="feedback-item success">
-                  <span class="icon">✅</span> Kata sandi memenuhi semua kriteria keamanan.
-                </div>
-              {/if}
-            </div>
-          {/if}
+          
+          <div class="password-feedback animate-fade-in">
+            {#each addPasswordChecklist as item}
+              <div class="feedback-item" class:success={newUser.password && item.satisfied} class:error={newUser.password && !item.satisfied} class:neutral={!newUser.password}>
+                {#if !newUser.password}
+                  <svg class="lucide" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--clr-text-dim); opacity: 0.6;"><circle cx="12" cy="12" r="10"/></svg>
+                {:else if item.satisfied}
+                  <svg class="lucide" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color: var(--clr-ok);"><path d="M20 6 9 17l-5-5"/></svg>
+                {:else}
+                  <svg class="lucide" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color: var(--clr-ng);"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                {/if}
+                <span>{item.label}</span>
+              </div>
+            {/each}
+          </div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" onclick={() => showAddModal = false}>{$t('admin.cancel')}</button>
@@ -502,20 +555,21 @@
               {/if}
             </button>
           </div>
-          {#if editingUser.password}
-            <div class="password-feedback animate-fade-in">
-              {#each editPasswordValidation.errors as err}
-                <div class="feedback-item error">
-                  <span class="icon">❌</span> {err}
-                </div>
-              {/each}
-              {#if editPasswordValidation.errors.length === 0}
-                <div class="feedback-item success">
-                  <span class="icon">✅</span> Kata sandi memenuhi semua kriteria keamanan.
-                </div>
-              {/if}
-            </div>
-          {/if}
+          
+          <div class="password-feedback animate-fade-in">
+            {#each editPasswordChecklist as item}
+              <div class="feedback-item" class:success={editingUser.password && item.satisfied} class:error={editingUser.password && !item.satisfied} class:neutral={!editingUser.password}>
+                {#if !editingUser.password}
+                  <svg class="lucide" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--clr-text-dim); opacity: 0.6;"><circle cx="12" cy="12" r="10"/></svg>
+                {:else if item.satisfied}
+                  <svg class="lucide" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color: var(--clr-ok);"><path d="M20 6 9 17l-5-5"/></svg>
+                {:else}
+                  <svg class="lucide" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color: var(--clr-ng);"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                {/if}
+                <span>{item.label}</span>
+              </div>
+            {/each}
+          </div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" onclick={() => showEditModal = false}>{$t('admin.cancel')}</button>
@@ -678,5 +732,8 @@
   .feedback-item.success {
     color: var(--clr-ok);
     font-weight: var(--fw-semibold);
+  }
+  .feedback-item.neutral {
+    color: var(--clr-text-muted);
   }
 </style>
