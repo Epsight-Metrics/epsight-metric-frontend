@@ -3,8 +3,29 @@
   import { t } from '$lib/i18n.js';
   import { auth } from '$lib/stores/auth.js';
   import { goto } from '$app/navigation';
+  import { 
+    Users, 
+    FileText, 
+    LayoutDashboard, 
+    ClipboardList, 
+    Bell, 
+    Link, 
+    Shield, 
+    Settings 
+  } from '@lucide/svelte';
 
   let { items = [], role = 'operator' } = $props();
+
+  const iconComponents = {
+    users: Users,
+    logs: FileText,
+    dashboard: LayoutDashboard,
+    history: ClipboardList,
+    alerts: Bell,
+    traceability: Link,
+    integrity: Shield,
+    calibration: Settings
+  };
 
   async function handleLogout() {
     if (confirm($t('auth.logout_confirm'))) {
@@ -26,7 +47,12 @@
         class="nav-item"
         class:active={isActive(item.href)}
       >
-        <span class="nav-icon">{@html item.icon}</span>
+        <span class="nav-icon">
+          {#if iconComponents[item.iconName]}
+            {@const IconComponent = iconComponents[item.iconName]}
+            <IconComponent size={20} />
+          {/if}
+        </span>
         <span class="nav-label">{item.label}</span>
       </a>
     {/each}

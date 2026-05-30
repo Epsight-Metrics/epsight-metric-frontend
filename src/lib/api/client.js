@@ -2,14 +2,14 @@
 const API_BASE = `${import.meta.env.VITE_API_URL || ''}/api`;
 
 
-/**
- * Get the stored JWT token.
- */
-function getToken() {
-  if (typeof localStorage !== 'undefined') {
-    return localStorage.getItem('srs_token');
-  }
-  return null;
+let activeToken = null;
+
+export function setToken(token) {
+  activeToken = token;
+}
+
+export function getToken() {
+  return activeToken;
 }
 
 /**
@@ -36,6 +36,7 @@ export async function apiFetch(endpoint, options = {}) {
 
   const headers = {
     'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
     ...options.headers,
   };
 
@@ -71,15 +72,16 @@ export async function apiFetch(endpoint, options = {}) {
         // Attempt to refresh token
         const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+          },
           credentials: 'include',
         });
         const refreshData = await refreshRes.json().catch(() => null);
 
         if (refreshRes.ok && refreshData?.accessToken) {
-          if (typeof localStorage !== 'undefined') {
-            localStorage.setItem('srs_token', refreshData.accessToken);
-          }
+          setToken(refreshData.accessToken);
           // Retry original request
           fetchOptions.headers['Authorization'] = `Bearer ${refreshData.accessToken}`;
           const retryRes = await fetch(url, fetchOptions);
@@ -102,8 +104,8 @@ export async function apiFetch(endpoint, options = {}) {
         }
       } catch (err) {
         // Clear session on refresh failure
+        setToken(null);
         if (typeof localStorage !== 'undefined') {
-          localStorage.removeItem('srs_token');
           localStorage.removeItem('srs_user');
         }
         if (typeof window !== 'undefined') {
@@ -112,11 +114,11 @@ export async function apiFetch(endpoint, options = {}) {
         throw new ApiError('Sesi berakhir, silakan login kembali', 401);
       }
     } else if (response.status === 401) {
-      if (typeof localStorage !== 'undefined' && endpoint !== '/auth/login') {
-        localStorage.removeItem('srs_token');
+      setToken(null);
+      if (typeof localStorage !== 'undefined' && endpoint !== '/auth/login' && endpoint !== '/auth/refresh' && endpoint !== '/auth/logout') {
         localStorage.removeItem('srs_user');
       }
-      if (typeof window !== 'undefined' && endpoint !== '/auth/login') {
+      if (typeof window !== 'undefined' && endpoint !== '/auth/login' && endpoint !== '/auth/refresh' && endpoint !== '/auth/logout') {
         window.location.href = '/login';
       }
     }

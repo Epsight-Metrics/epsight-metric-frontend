@@ -4,11 +4,21 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
 
+  const SAFE_PATHS = ['/operator', '/admin', '/manager', '/auditor', '/engineer', '/login'];
+
   onMount(() => {
     const unsub = isAuthenticated.subscribe(val => {
       if (val) {
         userRole.subscribe(role => {
-          if (role) goto(getDashboardUrl(role));
+          if (role) {
+            const target = getDashboardUrl(role);
+            // Strict whitelist check and relative URL constraint to prevent Open Redirect
+            if (SAFE_PATHS.includes(target) && target.startsWith('/') && !target.startsWith('//')) {
+              goto(target);
+            } else {
+              goto('/login');
+            }
+          }
         })();
       }
     });

@@ -261,11 +261,11 @@
       </div>
       <div class="date-filters">
         <div class="date-input-group">
-          <label class="date-label">Dari:</label>
+          <span class="date-label">Dari:</span>
           <input type="date" class="date-input" bind:value={dateFrom} />
         </div>
         <div class="date-input-group">
-          <label class="date-label">Sampai:</label>
+          <span class="date-label">Sampai:</span>
           <input type="date" class="date-input" bind:value={dateTo} />
         </div>
         <button class="btn btn-primary" onclick={applyFilter}>Terapkan</button>

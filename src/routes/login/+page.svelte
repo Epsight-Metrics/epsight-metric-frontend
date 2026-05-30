@@ -12,7 +12,40 @@
   let loading = $state(false);
   let error = $state("");
 
+  // Lockout states
+  let failedAttempts = $state(0);
+  let lockoutTime = $state(0);
+  let timerInterval;
+
+  function startLockoutTimer(seconds) {
+    lockoutTime = seconds;
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+      lockoutTime -= 1;
+      if (lockoutTime <= 0) {
+        clearInterval(timerInterval);
+        failedAttempts = 0;
+        localStorage.removeItem("srs_lockout_until");
+        error = "";
+      }
+    }, 1000);
+  }
+
   onMount(() => {
+    // Check existing lockout in localStorage
+    const storedLockout = localStorage.getItem("srs_lockout_until");
+    if (storedLockout) {
+      const until = parseInt(storedLockout, 10);
+      const remaining = Math.ceil((until - Date.now()) / 1000);
+      if (remaining > 0) {
+        failedAttempts = 5;
+        startLockoutTimer(remaining);
+        error = `Terlalu banyak percobaan gagal. Silakan coba lagi dalam ${remaining} detik.`;
+      } else {
+        localStorage.removeItem("srs_lockout_until");
+      }
+    }
+
     const unsub = isAuthenticated.subscribe((val) => {
       if (val) {
         userRole.subscribe((role) => {
@@ -20,23 +53,54 @@
         })();
       }
     });
-    return unsub;
+
+    return () => {
+      unsub();
+      clearInterval(timerInterval);
+    };
   });
 
   async function handleLogin(e) {
     e.preventDefault();
+    if (lockoutTime > 0) return;
+
+    // Trim and check inputs
+    const cleanUsername = username.trim();
+    if (!cleanUsername || cleanUsername.length < 3 || cleanUsername.length > 50) {
+      error = "Username harus antara 3 dan 50 karakter.";
+      return;
+    }
+    if (!/^[a-zA-Z0-9_\-\.]+$/.test(cleanUsername)) {
+      error = "Username hanya boleh mengandung huruf, angka, titik, strip, dan garis bawah.";
+      return;
+    }
+    if (!password || password.length < 8 || password.length > 100) {
+      error = "Kata sandi harus antara 8 dan 100 karakter.";
+      return;
+    }
+
     loading = true;
     error = "";
 
-    const user = await auth.login(username, password);
+    const user = await auth.login(cleanUsername, password);
     loading = false;
 
     if (user) {
+      failedAttempts = 0;
+      localStorage.removeItem("srs_lockout_until");
       goto(getDashboardUrl(user.role));
     } else {
-      auth.subscribe((s) => {
-        error = s.error;
-      })();
+      failedAttempts += 1;
+      if (failedAttempts >= 5) {
+        const lockoutDuration = 30; // 30 seconds
+        localStorage.setItem("srs_lockout_until", (Date.now() + lockoutDuration * 1000).toString());
+        startLockoutTimer(lockoutDuration);
+        error = `Terlalu banyak percobaan gagal. Silakan coba lagi dalam ${lockoutDuration} detik.`;
+      } else {
+        auth.subscribe((s) => {
+          error = `${s.error || "Username atau kata sandi salah"}. Sisa percobaan: ${5 - failedAttempts}`;
+        })();
+      }
     }
   }
 </script>
@@ -80,6 +144,10 @@
           placeholder={$t("auth.username")}
           required
           autocomplete="username"
+          minlength="3"
+          maxlength="50"
+          pattern="^[a-zA-Z0-9_\\-\\.]+$"
+          title="Username harus antara 3-50 karakter dan hanya boleh menggunakan huruf, angka, titik, strip, dan garis bawah."
         />
       </div>
 
@@ -94,6 +162,9 @@
             placeholder={$t("auth.password")}
             required
             autocomplete="current-password"
+            minlength="8"
+            maxlength="100"
+            title="Kata sandi harus berukuran antara 8-100 karakter."
           />
           <button
             type="button"
@@ -113,10 +184,12 @@
       <button
         type="submit"
         class="btn btn-primary btn-lg login-btn"
-        disabled={loading}
+        disabled={loading || lockoutTime > 0}
       >
         {#if loading}
           <span class="spinner"></span> {$t("common.loading")}
+        {:else if lockoutTime > 0}
+          Terkunci ({lockoutTime}s)
         {:else}
           {$t("auth.login_btn")}
         {/if}

@@ -203,11 +203,11 @@
       <button class="quick-btn" class:active={activeQuickFilter === 'month'} onclick={() => setQuickFilter('month')}>Bulan Ini</button>
     </div>
     <div class="date-filter-group">
-      <label class="date-label">Dari:</label>
+      <span class="date-label">Dari:</span>
       <input type="date" class="date-input" bind:value={dateFrom} />
     </div>
     <div class="date-filter-group">
-      <label class="date-label">Sampai:</label>
+      <span class="date-label">Sampai:</span>
       <input type="date" class="date-input" bind:value={dateTo} />
     </div>
   </div>
@@ -287,8 +287,14 @@
 
 <!-- Detail Modal -->
 {#if showDetailModal && selectedInspection}
-  <div class="modal-backdrop" onclick={() => showDetailModal = false}>
-    <div class="modal animate-fade-in" onclick={(e) => e.stopPropagation()}>
+  <div 
+    class="modal-backdrop" 
+    role="button" 
+    tabindex="-1" 
+    onclick={(e) => { if (e.target === e.currentTarget) showDetailModal = false; }}
+    onkeydown={(e) => { if (e.key === 'Escape') showDetailModal = false; }}
+  >
+    <div class="modal animate-fade-in">
       <div class="modal-header">
         <h2 class="modal-title">Inspection Evidence #{selectedInspection.id}</h2>
         <button class="btn-close" onclick={() => showDetailModal = false}>✕</button>

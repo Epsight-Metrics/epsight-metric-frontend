@@ -163,11 +163,11 @@
       <button class="quick-btn" class:active={activeQuickFilter === 'month'} onclick={() => setQuickFilter('month')}>Bulan Ini</button>
     </div>
     <div class="date-filter-group">
-      <label class="date-label">Dari:</label>
+      <span class="date-label">Dari:</span>
       <input type="date" class="date-input" bind:value={dateFrom} />
     </div>
     <div class="date-filter-group">
-      <label class="date-label">Sampai:</label>
+      <span class="date-label">Sampai:</span>
       <input type="date" class="date-input" bind:value={dateTo} />
     </div>
   </div>
