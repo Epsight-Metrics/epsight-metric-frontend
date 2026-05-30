@@ -5,6 +5,7 @@
   import { getAllBackendRoles, toFrontendRole } from '$lib/utils/roles.js';
   import { currentUser, auth } from '$lib/stores/auth.js';
   import { login as verifyLogin } from '$lib/api/auth.js';
+  import { validatePassword, generateSecurePassword } from '$lib/utils/password.js';
 
   let users = $state([]);
   let searchQuery = $state('');
@@ -34,6 +35,12 @@
 
   // New user form
   let newUser = $state({ username: '', name: '', role: 'OPERATOR_QC', password: '' });
+
+  // Password validation derived states (Svelte 5)
+  let addPasswordValidation = $derived(validatePassword(newUser.password, newUser.username, newUser.name));
+  let editPasswordValidation = $derived(
+    editingUser ? validatePassword(editingUser.password, editingUser.username, editingUser.name) : { isValid: true, errors: [] }
+  );
 
   const roles = getAllBackendRoles();
 
@@ -81,13 +88,13 @@
       return;
     }
 
-    // 4. Validate password complexity (at least one letter, one number, min 8 chars)
-    if (!newUser.password || newUser.password.length < 8 || newUser.password.length > 100) {
-      error = 'Kata sandi harus terdiri dari 8 sampai 100 karakter.';
+    // 4. Validate password complexity and standard criteria (NIST & OWASP)
+    if (!newUser.password) {
+      error = 'Kata sandi tidak boleh kosong.';
       return;
     }
-    if (!/(?=.*[A-Za-z])(?=.*\d)/.test(newUser.password)) {
-      error = 'Kata sandi harus mengandung setidaknya satu huruf dan satu angka.';
+    if (!addPasswordValidation.isValid) {
+      error = addPasswordValidation.errors[0];
       return;
     }
 
@@ -133,12 +140,8 @@
 
     // 3. Validate password complexity if present
     if (editingUser.password) {
-      if (editingUser.password.length < 8 || editingUser.password.length > 100) {
-        error = 'Kata sandi baru harus terdiri dari 8 sampai 100 karakter.';
-        return;
-      }
-      if (!/(?=.*[A-Za-z])(?=.*\d)/.test(editingUser.password)) {
-        error = 'Kata sandi baru harus mengandung setidaknya satu huruf dan satu angka.';
+      if (!editPasswordValidation.isValid) {
+        error = editPasswordValidation.errors[0];
         return;
       }
       payload.password = editingUser.password;
@@ -361,7 +364,20 @@
           </select>
         </div>
         <div class="form-group">
-          <label class="label" for="add-password">{$t('admin.password')}</label>
+          <div class="password-header">
+            <label class="label" for="add-password" style="margin-bottom: 0;">{$t('admin.password')}</label>
+            <button
+              type="button"
+              class="btn-generate-password"
+              onclick={() => {
+                newUser.password = generateSecurePassword(newUser.username, newUser.name);
+                showAddPassword = true;
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Generate sandi acak
+            </button>
+          </div>
           <div class="password-field">
             <input 
               id="add-password"
@@ -371,9 +387,8 @@
               autocomplete="new-password"
               required 
               minlength="8" 
-              maxlength="100" 
-              pattern="^(?=.*[a-zA-Z])(?=.*[0-9]).+$" 
-              title="Kata sandi harus terdiri dari minimal 8 karakter, mengandung setidaknya satu huruf dan satu angka." 
+              maxlength="64"
+              placeholder="Masukkan kata sandi aman"
             />
             <button
               type="button"
@@ -388,10 +403,24 @@
               {/if}
             </button>
           </div>
+          {#if newUser.password}
+            <div class="password-feedback animate-fade-in">
+              {#each addPasswordValidation.errors as err}
+                <div class="feedback-item error">
+                  <span class="icon">❌</span> {err}
+                </div>
+              {/each}
+              {#if addPasswordValidation.errors.length === 0}
+                <div class="feedback-item success">
+                  <span class="icon">✅</span> Kata sandi memenuhi semua kriteria keamanan.
+                </div>
+              {/if}
+            </div>
+          {/if}
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" onclick={() => showAddModal = false}>{$t('admin.cancel')}</button>
-          <button type="submit" class="btn btn-primary" disabled={saving}>{$t('admin.save')}</button>
+          <button type="submit" class="btn btn-primary" disabled={saving || (newUser.password && !addPasswordValidation.isValid)}>{$t('admin.save')}</button>
         </div>
       </form>
     </div>
@@ -435,7 +464,20 @@
           </select>
         </div>
         <div class="form-group">
-          <label class="label" for="edit-password">{$t('admin.password')} (kosongkan jika tidak diubah)</label>
+          <div class="password-header">
+            <label class="label" for="edit-password">{$t('admin.password')} (kosongkan jika tidak diubah)</label>
+            <button
+              type="button"
+              class="btn-generate-password"
+              onclick={() => {
+                editingUser.password = generateSecurePassword(editingUser.username, editingUser.name);
+                showEditPassword = true;
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Generate sandi acak
+            </button>
+          </div>
           <div class="password-field">
             <input 
               id="edit-password"
@@ -444,9 +486,8 @@
               bind:value={editingUser.password} 
               autocomplete="new-password"
               minlength="8" 
-              maxlength="100" 
-              pattern="^(?=.*[a-zA-Z])(?=.*[0-9]).+$" 
-              title="Kata sandi harus terdiri dari minimal 8 karakter, mengandung setidaknya satu huruf dan satu angka." 
+              maxlength="64"
+              placeholder="Masukkan kata sandi baru"
             />
             <button
               type="button"
@@ -461,10 +502,24 @@
               {/if}
             </button>
           </div>
+          {#if editingUser.password}
+            <div class="password-feedback animate-fade-in">
+              {#each editPasswordValidation.errors as err}
+                <div class="feedback-item error">
+                  <span class="icon">❌</span> {err}
+                </div>
+              {/each}
+              {#if editPasswordValidation.errors.length === 0}
+                <div class="feedback-item success">
+                  <span class="icon">✅</span> Kata sandi memenuhi semua kriteria keamanan.
+                </div>
+              {/if}
+            </div>
+          {/if}
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" onclick={() => showEditModal = false}>{$t('admin.cancel')}</button>
-          <button type="submit" class="btn btn-primary" disabled={saving}>{$t('admin.save')}</button>
+          <button type="submit" class="btn btn-primary" disabled={saving || (editingUser.password && !editPasswordValidation.isValid)}>{$t('admin.save')}</button>
         </div>
       </form>
     </div>
@@ -571,4 +626,57 @@
   .password-field :global(.input) { width: 100%; padding-right: var(--sp-10); }
   .password-toggle { position: absolute; right: var(--sp-3); background: none; border: none; color: var(--clr-text-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px; transition: color var(--transition-fast); }
   .password-toggle:hover { color: var(--clr-text-muted); }
+
+  /* Password strength feedback & generator styling */
+  .password-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--sp-1);
+  }
+  .btn-generate-password {
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-medium);
+    color: var(--clr-accent);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: color var(--transition-fast), transform var(--transition-fast);
+  }
+  .btn-generate-password:hover {
+    color: var(--clr-accent-hover);
+    transform: translateY(-1px);
+    text-decoration: underline;
+  }
+  .btn-generate-password:active {
+    transform: translateY(0);
+  }
+  .password-feedback {
+    margin-top: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--clr-bg);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .feedback-item {
+    font-size: var(--fs-xs);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1.4;
+  }
+  .feedback-item.error {
+    color: var(--clr-ng);
+  }
+  .feedback-item.success {
+    color: var(--clr-ok);
+    font-weight: var(--fw-semibold);
+  }
 </style>
