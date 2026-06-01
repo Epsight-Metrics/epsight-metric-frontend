@@ -266,7 +266,9 @@
       const refName = part ? part.partCode : '';
       formData.append('referenceName', refName);  
 
-      const apiResponse = await fetch('/api/operator/inspect/online', {
+      const API_BASE = `${import.meta.env.VITE_API_URL || ''}/api`;
+
+      const apiResponse = await fetch(`${API_BASE}/operator/inspect/online`, {
         method: 'POST',
         credentials: 'include',
         headers: {
