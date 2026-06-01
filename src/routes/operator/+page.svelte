@@ -30,7 +30,11 @@
   let detectionInterval = null;
   let videoStreamSize = $state({ width: 1920, height: 1080 }); // Default size
 
-  // Mode Online state
+  // CV Stream URL
+  if (!import.meta.env.VITE_CV_STREAM_URL) {
+    console.warn('VITE_CV_STREAM_URL not set, CV stream will not work');
+  }
+  const CV_STREAM_URL = import.meta.env.VITE_CV_STREAM_URL;
   let inspectionMode = $state('local');
   let videoElement = $state(null);
   let imgElement = $state(null);
@@ -481,7 +485,7 @@
           <div class="camera-feed">
             <div class="camera-placeholder">
               <img 
-                src="http://localhost:5000/video_feed" 
+                src={CV_STREAM_URL} 
                 alt="CV Camera Feed"
                 class="camera-video"
                 onerror={(e) => { e.target.style.display='none'; e.target.nextElementSibling.style.display='flex'; }}
