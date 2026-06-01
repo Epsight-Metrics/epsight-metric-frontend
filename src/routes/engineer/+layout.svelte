@@ -22,7 +22,7 @@
     {
       href: "/engineer/references",
       iconName: "database",
-      label: "References",
+      label: $t("nav.references"),
     },
   ]);
 </script>
