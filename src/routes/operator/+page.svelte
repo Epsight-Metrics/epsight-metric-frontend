@@ -28,7 +28,10 @@
   let eventSource = null;
 
   // CV Stream URL
-  const CV_STREAM_URL = import.meta.env.VITE_CV_STREAM_URL || 'https://epsight-metric-mainprogram-production.up.railway.app/video_feed';
+  if (!import.meta.env.VITE_CV_STREAM_URL) {
+    console.warn('VITE_CV_STREAM_URL not set, CV stream will not work');
+  }
+  const CV_STREAM_URL = import.meta.env.VITE_CV_STREAM_URL;
   let inspectionMode = $state('local');
   let videoElement = $state(null);
   let imgElement = $state(null);
@@ -267,9 +270,11 @@
       const refName = part ? part.partCode : '';
       formData.append('referenceName', refName);  
 
-      const API_BASE = import.meta.env.VITE_API_URL 
-        ? `${import.meta.env.VITE_API_URL}/api` 
-        : 'https://epsight-metric-backend-production.up.railway.app/api';
+      if (!import.meta.env.VITE_API_URL) {
+        throw new Error('VITE_API_URL environment variable is required');
+      }
+      
+      const API_BASE = `${import.meta.env.VITE_API_URL}/api`;
 
       const apiResponse = await fetch(`${API_BASE}/operator/inspect/online`, {
         method: 'POST',

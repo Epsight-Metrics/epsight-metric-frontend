@@ -1,7 +1,9 @@
 // Centralized API client — JWT auth, error handling, token management
-const API_BASE = import.meta.env.VITE_API_URL 
-  ? `${import.meta.env.VITE_API_URL}/api` 
-  : 'https://epsight-metric-backend-production.up.railway.app/api';
+if (!import.meta.env.VITE_API_URL) {
+  throw new Error('VITE_API_URL environment variable is required');
+}
+
+const API_BASE = `${import.meta.env.VITE_API_URL}/api`;
 
 
 let activeToken = null;

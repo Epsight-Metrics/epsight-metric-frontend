@@ -1,9 +1,11 @@
 ﻿// SSE Notifications — real-time event stream
 import { getToken } from '$lib/api/client.js';
 
-const API_BASE = import.meta.env.VITE_API_URL 
-  ? `${import.meta.env.VITE_API_URL}/api` 
-  : 'https://epsight-metric-backend-production.up.railway.app/api';
+if (!import.meta.env.VITE_API_URL) {
+  throw new Error('VITE_API_URL environment variable is required');
+}
+
+const API_BASE = `${import.meta.env.VITE_API_URL}/api`;
 
 /**
  * Create an SSE connection to the notifications stream.
