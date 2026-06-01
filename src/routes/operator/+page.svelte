@@ -27,7 +27,8 @@
   let cvLastSeen = $state(null);
   let eventSource = null;
 
-  // Mode Online state
+  // CV Stream URL
+  const CV_STREAM_URL = import.meta.env.VITE_CV_STREAM_URL || 'https://epsight-metric-mainprogram-production.up.railway.app/video_feed';
   let inspectionMode = $state('local');
   let videoElement = $state(null);
   let imgElement = $state(null);
@@ -458,7 +459,7 @@
           <div class="camera-feed">
             <div class="camera-placeholder">
               <img 
-                src="http://localhost:5000/video_feed" 
+                src={CV_STREAM_URL} 
                 alt="CV Camera Feed"
                 class="camera-video"
                 onerror={(e) => { e.target.style.display='none'; e.target.nextElementSibling.style.display='flex'; }}
