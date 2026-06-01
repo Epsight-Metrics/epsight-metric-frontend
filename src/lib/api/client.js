@@ -9,6 +9,13 @@ export function setToken(token) {
 }
 
 export function getToken() {
+  // Try to get from cookie first
+  if (typeof document !== 'undefined') {
+    const match = document.cookie.match(/(?:^|;\s*)accessToken=([^;]*)/)
+    if (match) {
+      activeToken = match[1]
+    }
+  }
   return activeToken;
 }
 
