@@ -245,9 +245,16 @@
       formData.append('partId', selectedPartId);
       formData.append('sessionId', activeSession.sessionId);
 
+      // Get token from API client
+      const { getToken } = await import('$lib/api/client.js');
+      const token = getToken();
+
       const apiResponse = await fetch('/api/operator/inspect/online', {
         method: 'POST',
         credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         body: formData
       });
 
@@ -309,6 +316,8 @@
 
     // Subscribe SSE - terima hasil inspeksi dari CV secara real-time
     eventSource = connectSSE((eventType, data) => {
+      console.log('[SSE] Event received:', eventType, data); // Debug log
+      
       if (eventType === 'inspection-update') {
         cvLastSeen = Date.now();  // Update CV last seen timestamp
         
@@ -327,6 +336,8 @@
           fromCV:       true,
         };
         
+        console.log('[SSE] Mapped inspection:', mapped); // Debug log
+        
         // Skip jika ini adalah hasil dari manual inspection
         if (mapped.id === manualInspectionId) return;
         
@@ -342,10 +353,19 @@
         inspecting    = false;
       }
       if (eventType === 'ng-alert') {
+        console.log('[SSE] NG Alert triggered!'); // Debug log
         showNgOverlay = true;
         playAlarm();
       }
+    }, (error) => {
+      console.error('[SSE] Connection error:', error);
+      error = 'SSE connection failed. Refresh page to reconnect.';
     });
+    
+    if (!eventSource) {
+      console.error('[SSE] Failed to establish connection - no auth token?');
+      error = 'Failed to connect to real-time updates. Please login again.';
+    }
   });
   onDestroy(() => {
     eventSource?.close();
