@@ -266,7 +266,9 @@
       const refName = part ? part.partCode : '';
       formData.append('referenceName', refName);  
 
-      const API_BASE = `${import.meta.env.VITE_API_URL || ''}/api`;
+      const API_BASE = import.meta.env.VITE_API_URL 
+        ? `${import.meta.env.VITE_API_URL}/api` 
+        : 'https://epsight-metric-backend-production.up.railway.app/api';
 
       const apiResponse = await fetch(`${API_BASE}/operator/inspect/online`, {
         method: 'POST',
