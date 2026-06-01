@@ -1,9 +1,10 @@
 <script>
   import { t } from '$lib/i18n.js';
-  import { Scan, AlertTriangle, Volume2, ClipboardList, CheckCircle, CircleDot, Circle, Check } from '@lucide/svelte';
+  import { Scan, AlertTriangle, Volume2, ClipboardList, CheckCircle, XCircle, CircleDot, Circle, Check, Monitor, Smartphone } from '@lucide/svelte';
   import { onMount, onDestroy } from 'svelte';
   import { getSession, startSession, stopSession, submitInspection, getParts } from '$lib/api/operator.js';
   import { connectSSE } from '$lib/api/notifications.js';
+  import { getToken } from '$lib/api/client.js';
 
   // Session state
   let activeSession = $state(null);
@@ -29,6 +30,7 @@
   // Mode Online state
   let inspectionMode = $state('local');
   let videoElement = $state(null);
+  let imgElement = $state(null);
   let stream = $state(null);
   let capturedImage = $state(null);
   let onlineProcessing = $state(false);
@@ -39,6 +41,14 @@
 
   // Derived state untuk status CV online/offline
   let cvOnline = $derived(cvLastSeen && (Date.now() - cvLastSeen) < 60_000);
+
+  // Auto-attach stream when videoElement is recreated after taking a photo
+  $effect(() => {
+    if (videoElement && stream && videoElement.srcObject !== stream) {
+      videoElement.srcObject = stream;
+      videoElement.play().catch(err => console.error('Auto-play error:', err));
+    }
+  });
 
   // Loading & error
   let pageLoading = $state(true);
@@ -211,13 +221,20 @@
   }
 
   async function capturePhoto() {
-    if (!videoElement) return;
+    const sourceElement = useIpCamera ? imgElement : videoElement;
+    if (!sourceElement) return;
     
     const canvas = document.createElement('canvas');
     canvas.width = 1920;
     canvas.height = 1080;
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+    
+    // Check if it's a video element to get dimensions if available, else fallback
+    const width = sourceElement.videoWidth || sourceElement.naturalWidth || canvas.width;
+    const height = sourceElement.videoHeight || sourceElement.naturalHeight || canvas.height;
+    
+    // Draw the image
+    ctx.drawImage(sourceElement, 0, 0, width, height, 0, 0, canvas.width, canvas.height);
     
     const blob = await new Promise(resolve => 
       canvas.toBlob(resolve, 'image/jpeg', 0.85)
@@ -245,15 +262,23 @@
       formData.append('partId', selectedPartId);
       formData.append('sessionId', activeSession.sessionId);
 
+      const part = parts.find((p) => p.id == selectedPartId);
+      const refName = part ? part.partCode : '';
+      formData.append('referenceName', refName);  
+
       const apiResponse = await fetch('/api/operator/inspect/online', {
         method: 'POST',
         credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${getToken()}`
+        },
         body: formData
       });
 
       if (!apiResponse.ok) {
         const errorData = await apiResponse.json();
-        throw new Error(errorData.message || 'Inspeksi gagal');
+        const errDetail = errorData.error ? (typeof errorData.error === 'string' ? errorData.error : JSON.stringify(errorData.error)) : '';
+        throw new Error(`${errorData.message || 'Inspeksi gagal'} ${errDetail}`);
       }
 
       // Reset state
@@ -422,24 +447,6 @@
     <div class="inspect-grid">
       <!-- Left: Camera Feed -->
       <div class="camera-section">
-        <!-- Mode Toggle -->
-        <div class="mode-toggle">
-          <button 
-            class="mode-btn"
-            class:active={inspectionMode === 'local'}
-            onclick={() => switchMode('local')}
-          >
-            🖥️ Mode Lokal
-          </button>
-          <button 
-            class="mode-btn"
-            class:active={inspectionMode === 'online'}
-            onclick={() => switchMode('online')}
-          >
-            📱 Mode Online
-          </button>
-        </div>
-
         <div class="section-label">{$t('operator.live_camera')}</div>
         
         {#if inspectionMode === 'local'}
@@ -490,130 +497,100 @@
           </button>
         {:else}
           <!-- Online Mode -->
-          <div class="online-mode-options">
-            <label class="radio-option">
-              <input type="radio" bind:group={useIpCamera} value={false} />
-              Webcam/USB Camera
-            </label>
-            <label class="radio-option">
-              <input type="radio" bind:group={useIpCamera} value={true} />
-              IP Camera (HP)
-            </label>
+          <div style="display: {capturedImage ? 'none' : 'flex'}; flex-direction: column; flex: 1; gap: var(--sp-3);">
+            {#if useIpCamera}
+              <div class="camera-feed">
+                <div class="camera-placeholder">
+                  <img 
+                    bind:this={imgElement}
+                    src={ipCameraUrl}
+                    alt="IP Camera Feed"
+                    class="camera-video"
+                    crossorigin="anonymous"
+                    style="display: block;"
+                    onerror={(e) => { e.target.style.display='none'; e.target.nextElementSibling.querySelector('.error-text').style.display='block'; }}
+                    onload={(e) => { e.target.style.display='block'; e.target.nextElementSibling.querySelector('.error-text').style.display='none'; }}
+                  />
+                  <div class="camera-fallback" style="display: flex; pointer-events: none;">
+                    <div class="camera-circle"></div>
+                    <div class="crosshair h"></div>
+                    <div class="crosshair v"></div>
+                    <div class="corner tl"></div>
+                    <div class="corner tr"></div>
+                    <div class="corner bl"></div>
+                    <div class="corner br"></div>
+                    <p class="camera-hint error-text" style="display: none; color: var(--clr-ng); background: rgba(0,0,0,0.7); padding: 4px 8px; border-radius: 4px; margin-bottom: 30px;">Tidak dapat terhubung ke IP Camera</p>
+                    <p class="camera-hint">Posisikan part di tengah</p>
+                  </div>
+                </div>
+              </div>
+            {:else}
+              <div class="camera-feed">
+                <div class="camera-placeholder">
+                  <video 
+                    bind:this={videoElement}
+                    class="camera-video"
+                    autoplay
+                    playsinline
+                    muted
+                    style="display: block;"
+                    onplaying={(e) => { e.target.style.display='block'; }}
+                    onerror={(e) => { e.target.style.display='none'; }}
+                  ></video>
+                  <div class="camera-fallback" style="display: flex; pointer-events: none;">
+                    <div class="camera-circle"></div>
+                    <div class="crosshair h"></div>
+                    <div class="crosshair v"></div>
+                    <div class="corner tl"></div>
+                    <div class="corner tr"></div>
+                    <div class="corner bl"></div>
+                    <div class="corner br"></div>
+                    <p class="camera-hint">{$t('operator.align_part')}</p>
+                  </div>
+                </div>
+              </div>
+            {/if}
+
+            <button
+              class="inspect-btn"
+              style="width: 100%; margin-top: auto;"
+              onclick={capturePhoto}
+              disabled={!selectedPartId || !activeSession}
+            >
+              <Scan size={22} /> Ambil Foto
+            </button>
           </div>
 
-          {#if useIpCamera}
-            <!-- IP Camera Mode -->
-            <div class="online-controls">
-              <label class="label">URL IP Camera</label>
-              <input 
-                type="text" 
-                class="input" 
-                bind:value={ipCameraUrl}
-                placeholder="http://192.168.1.100:8080/video"
-              />
-              <p style="color: var(--clr-text-dim); font-size: 12px; margin-top: 4px;">
-                Install "IP Webcam" app di HP, start server, masukkan URL.
-              </p>
-            </div>
-
-            <div class="camera-feed">
-              <div class="camera-placeholder">
-                <img 
-                  src={ipCameraUrl}
-                  alt="IP Camera Feed"
-                  class="camera-video"
-                  style="display: block;"
-                  onerror={(e) => { e.target.style.display='none'; e.target.nextElementSibling.style.display='flex'; }}
-                  onload={(e) => { e.target.style.display='block'; e.target.nextElementSibling.style.display='none'; }}
-                />
-                <div class="camera-fallback" style="display: flex;">
-                  <p class="camera-hint">Tidak dapat terhubung ke IP Camera</p>
-                </div>
-              </div>
-            </div>
-
-            <button
-              class="inspect-btn"
-              onclick={startInspection}
-              disabled={inspecting || !selectedPartId || !activeSession || !ipCameraUrl}
-            >
-              {#if inspecting}
-                <span class="spinner"></span> Processing...
-              {:else}
-                <Scan size={22} /> Inspect Part
-              {/if}
-            </button>
-          {:else}
-          <!-- Webcam/USB Camera Mode -->
-          {#if !capturedImage}
-            <div class="online-controls">
-              <label class="label">Pilih Kamera</label>
-              <select 
-                class="select" 
-                bind:value={selectedCamera}
-                onchange={async () => await startCamera()}
-              >
-                {#each availableCameras as camera}
-                  <option value={camera.deviceId}>
-                    {camera.label || `Camera ${availableCameras.indexOf(camera) + 1}`}
-                  </option>
-                {/each}
-              </select>
-              {#if availableCameras.length === 0}
-                <p style="color: var(--clr-text-dim); font-size: 12px; margin-top: 4px;">
-                  Tidak ada kamera terdeteksi. Pastikan DroidCam sudah connect dan izinkan akses kamera.
-                </p>
-              {/if}
-            </div>
-
-            <div class="camera-feed">
-              <div class="camera-placeholder">
-                <img 
-                  src="https://epsight-metric-mainprogram-production.up.railway.app/video_feed"
-                  alt="CV Stream with Overlay"
-                  class="camera-video"
-                  onerror={(e) => { e.target.style.display='none'; e.target.nextElementSibling.style.display='flex'; }}
-                  onload={(e) => { e.target.style.display='block'; e.target.nextElementSibling.style.display='none'; }}
-                />
-                <div class="camera-fallback" style="display: flex;">
-                  <div class="camera-circle"></div>
-                  <div class="crosshair h"></div>
-                  <div class="crosshair v"></div>
-                  <div class="corner tl"></div>
-                  <div class="corner tr"></div>
-                  <div class="corner bl"></div>
-                  <div class="corner br"></div>
-                  {#if !inspecting && !hasResult}
-                    <p class="camera-hint">{$t('operator.align_part')}</p>
-                  {/if}
-                  {#if inspecting}
-                    <div class="scan-line"></div>
-                  {/if}
-                </div>
-              </div>
-              <div class="camera-badge" class:connected={cvOnline}>
-                <span class="dot"></span>
-                {cvOnline ? 'CV Online' : 'CV Offline'}
-              </div>
-            </div>
-            
-            <button
-              class="inspect-btn"
-              class:inspecting
-              onclick={startInspection}
-              disabled={inspecting || !selectedPartId || !activeSession || !cvOnline}
-            >
-              {#if inspecting}
-                <span class="spinner"></span> Triggering CV...
-              {:else}
-                <Scan size={22} /> {$t('operator.inspect_btn')}
-              {/if}
-            </button>
-          {:else}
+          {#if capturedImage}
+            <!-- Preview Mode setelah foto diambil -->
             <div class="camera-feed">
               <div class="camera-placeholder">
                 <img src={capturedImage} alt="Preview" class="camera-video" style="display: block;" />
               </div>
+            </div>
+            
+            <div style="display: flex; gap: var(--sp-3); margin-top: var(--sp-3);">
+              <button
+                class="btn btn-secondary"
+                style="flex: 1; min-height: 64px; font-family: var(--font-heading); font-size: 1.1rem; font-weight: bold; border-radius: var(--radius-lg);"
+                onclick={() => capturedImage = null}
+                disabled={onlineProcessing}
+              >
+                Ulangi
+              </button>
+              <button
+                class="inspect-btn"
+                style="flex: 2; margin: 0;"
+                class:inspecting={onlineProcessing}
+                onclick={submitOnlineInspection}
+                disabled={onlineProcessing}
+              >
+                {#if onlineProcessing}
+                  <span class="spinner"></span> Mengirim...
+                {:else}
+                  <CheckCircle size={22} /> Kirim Inspeksi
+                {/if}
+              </button>
             </div>
           {/if}
         {/if}
@@ -637,17 +614,79 @@
           <div class="status-card animate-fade-in" class:ok={resultStatus === 'OK'} class:ng={resultStatus === 'NG'}>
             <span class="status-icon">
               {#if resultStatus === 'OK'}
-                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--clr-ok)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                <CheckCircle size={48} />
               {:else}
-                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--clr-ng)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                <XCircle size={48} />
               {/if}
             </span>
             <span class="status-text">STATUS: {resultStatus}</span>
           </div>
-        {:else if !inspecting}
+        {/if}
+
+        {#if !hasResult && !inspecting}
           <div class="no-result">
             <span class="no-result-icon"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></span>
             <p>{$t('operator.waiting')}</p>
+          </div>
+        {/if}
+
+        <!-- Mode Toggle -->
+        <div class="mode-toggle">
+          <button 
+            class="mode-btn"
+            class:active={inspectionMode === 'local'}
+            onclick={() => switchMode('local')}
+          >
+            <Monitor size={18} /> Mode Lokal
+          </button>
+          <button 
+            class="mode-btn"
+            class:active={inspectionMode === 'online'}
+            onclick={() => switchMode('online')}
+          >
+            <Smartphone size={18} /> Mode Online
+          </button>
+        </div>
+
+        {#if inspectionMode === 'online'}
+          <div class="online-header-row">
+            <div class="online-mode-options">
+              <label class="radio-option">
+                <input type="radio" bind:group={useIpCamera} value={false} />
+                Webcam/USB Camera
+              </label>
+              <label class="radio-option">
+                <input type="radio" bind:group={useIpCamera} value={true} />
+                IP Camera (HP)
+              </label>
+            </div>
+
+            {#if useIpCamera}
+              <div class="online-controls">
+                <input 
+                  type="text" 
+                  class="input" 
+                  bind:value={ipCameraUrl}
+                  placeholder="URL IP Camera (contoh: http://192.168.1.100:8080/video)"
+                  title="URL IP Camera"
+                />
+              </div>
+            {:else}
+              <div class="online-controls">
+                <select 
+                  class="select" 
+                  bind:value={selectedCamera}
+                  onchange={async () => await startCamera()}
+                  title="Pilih Kamera"
+                >
+                  {#each availableCameras as camera}
+                    <option value={camera.deviceId}>
+                      {camera.label || `Camera ${availableCameras.indexOf(camera) + 1}`}
+                    </option>
+                  {/each}
+                </select>
+              </div>
+            {/if}
           </div>
         {/if}
 
@@ -790,7 +829,6 @@
     margin-bottom: var(--sp-3);
   }
 
-  /* Camera */
   .camera-section {
     display: flex;
     flex-direction: column;
@@ -1240,13 +1278,23 @@
     border-color: var(--clr-accent);
   }
 
+  /* Online Header Row — radio + dropdown side-by-side */
+  .online-header-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: var(--sp-3);
+  }
   .online-mode-options {
     display: flex;
-    gap: var(--sp-4);
-    margin-bottom: var(--sp-3);
-    padding: var(--sp-3);
+    gap: 16px;
+    align-items: center;
+    padding: 0 16px;
+    min-height: 44px;
     background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
     border-radius: var(--radius-md);
+    white-space: nowrap;
   }
 
   .radio-option {
@@ -1261,46 +1309,20 @@
     cursor: pointer;
   }
 
-  /* Online Mode */
-  .online-mode-container {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-3);
-  }
-
   .online-controls {
+    flex: 1;
     display: flex;
-    flex-direction: column;
-    gap: var(--sp-2);
+    align-items: center;
   }
-
-  .online-controls .select {
-    width: 100%;
-    padding: 12px;
-    font-size: 14px;
-  }
-
+  .online-controls .select,
   .online-controls .input {
     width: 100%;
-    padding: 12px;
+    margin-bottom: 0;
+    min-height: 44px;
+    padding: 10px 12px;
     font-size: 14px;
     border: 1px solid var(--clr-border);
-    border-radius: 8px;
-  }
-
-  .online-actions {
-    display: flex;
-    gap: var(--sp-3);
-  }
-
-  .online-actions button {
-    flex: 1;
-  }
-
-  .online-actions .btn-secondary {
-    padding: 16px 32px;
-    font-size: 1.1rem;
-    min-height: 56px;
+    border-radius: var(--radius-md);
   }
 </style>
 
