@@ -19,6 +19,11 @@
       iconName: "calibration",
       label: $t("nav.calibration"),
     },
+    {
+      href: "/engineer/references",
+      iconName: "database",
+      label: $t("nav.references"),
+    },
   ]);
 </script>
 

@@ -167,6 +167,7 @@ const translations = {
   'engineer.calibration': 'Kalibrasi CV',
   'engineer.calibration_desc': 'Atur parameter deteksi kamera untuk sistem inspeksi otomatis',
   'nav.calibration': 'Kalibrasi Parameter CV',
+  'nav.references': 'Manajemen Referensi',
   'role.engineer': 'Engineer',
 
   // Roles
