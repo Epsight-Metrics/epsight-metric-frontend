@@ -1,7 +1,9 @@
-import { API_URL } from './config.js';
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
 
 export async function getReferences() {
-  const res = await fetch(`${API_URL}/api/reference`, {
+  const res = await fetch(`${API_BASE}/reference`, {
     credentials: 'include'
   });
   if (!res.ok) throw new Error('Failed to fetch references');
@@ -9,7 +11,7 @@ export async function getReferences() {
 }
 
 export async function saveReference(data) {
-  const res = await fetch(`${API_URL}/api/reference`, {
+  const res = await fetch(`${API_BASE}/reference`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -59,7 +61,7 @@ export async function saveReferenceFromStream(name, cvConfig) {
 }
 
 export async function deleteReference(name) {
-  const res = await fetch(`${API_URL}/api/reference/${encodeURIComponent(name)}`, {
+  const res = await fetch(`${API_BASE}/reference/${encodeURIComponent(name)}`, {
     method: 'DELETE',
     credentials: 'include'
   });
@@ -68,7 +70,7 @@ export async function deleteReference(name) {
 }
 
 export async function clearAllReferences() {
-  const res = await fetch(`${API_URL}/api/reference`, {
+  const res = await fetch(`${API_BASE}/reference`, {
     method: 'DELETE',
     credentials: 'include'
   });
