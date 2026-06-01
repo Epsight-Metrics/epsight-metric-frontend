@@ -1,7 +1,7 @@
 // Centralized API client — JWT auth, error handling, token management
-const API_BASE = import.meta.env.VITE_API_URL 
-  ? `${import.meta.env.VITE_API_URL}/api` 
-  : 'https://epsight-metric-backend-production.up.railway.app/api';
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
 
 
 let activeToken = null;
@@ -81,7 +81,7 @@ export async function apiFetch(endpoint, options = {}) {
         // Attempt to refresh token
         const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'X-Requested-With': 'XMLHttpRequest'
           },
