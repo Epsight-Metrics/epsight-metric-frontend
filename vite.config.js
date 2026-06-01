@@ -8,6 +8,8 @@ export default defineConfig(({ mode }) => {
 	return {
 		plugins: [sveltekit()],
 		server: {
+			host: '0.0.0.0', // Allow external connections (for mobile access)
+			port: 5173,
 			proxy: {
 				'/api': {
 

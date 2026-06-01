@@ -1,4 +1,6 @@
-// SSE Notifications — real-time event stream
+﻿// SSE Notifications — real-time event stream
+import { getToken } from '$lib/api/client.js';
+
 const API_BASE = '/api';
 
 /**
@@ -8,13 +10,14 @@ const API_BASE = '/api';
  * @returns {EventSource} The EventSource instance (call .close() to disconnect)
  */
 export function connectSSE(onMessage, onError) {
-  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('srs_token') : null;
+  // Ambil token dari memory (bukan localStorage — access token disimpan di memory)
+  const token = getToken();
   if (!token) {
     console.warn('No auth token for SSE connection');
     return null;
   }
 
-  // EventSource doesn't support custom headers, so pass token as query param
+  // EventSource tidak support custom headers, kirim token via query param
   const url = `${API_BASE}/notifications/stream?token=${encodeURIComponent(token)}`;
   const eventSource = new EventSource(url);
 
@@ -33,6 +36,15 @@ export function connectSSE(onMessage, onError) {
       onMessage('ng-alert', data);
     } catch (err) {
       console.error('Failed to parse ng-alert:', err);
+    }
+  });
+
+  eventSource.addEventListener('cv-trigger', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      onMessage('cv-trigger', data);
+    } catch (err) {
+      console.error('Failed to parse cv-trigger:', err);
     }
   });
 

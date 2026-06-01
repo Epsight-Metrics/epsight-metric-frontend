@@ -21,12 +21,23 @@
   let selectedPartId = $state(null);
   let parts = $state([]);
   let recentInspections = $state([]);
-  let cameraConnected = $state(true);
   let todayInspected = $state(0);
   let todayNg = $state(0);
-  let lastCvResult  = $state(null);   // data SSE terakhir dari CV
-  let ngAlertData   = $state(null);   // data NG terbaru untuk overlay
-  let eventSource   = null;           // SSE connection handle
+  let cvLastSeen = $state(null);
+  let eventSource = null;
+
+  // Mode Online state
+  let inspectionMode = $state('local');
+  let videoElement = $state(null);
+  let stream = $state(null);
+  let capturedImage = $state(null);
+  let onlineProcessing = $state(false);
+  let referenceName = $state('');
+  let availableCameras = $state([]);
+  let selectedCamera = $state('');
+
+  // Derived state untuk status CV online/offline
+  let cvOnline = $derived(cvLastSeen && (Date.now() - cvLastSeen) < 60_000);
 
   // Loading & error
   let pageLoading = $state(true);
@@ -107,50 +118,145 @@
   }
 
   async function startInspection() {
-    if (inspecting || !selectedPartId) return;
+    if (inspecting || !selectedPartId || !activeSession) return;
     inspecting = true;
-    hasResult = false;
     error = '';
 
-    // Simulate CV processing delay (camera capture + measurement)
-    await new Promise((r) => setTimeout(r, 1200 + Math.random() * 600));
-
-    // Demo: random result — in production, CV system calls /api/operator/inspect/cv
-    const isOk = Math.random() > 0.2;
-    const dims = {
-      length: +(12 + Math.random() * 0.5).toFixed(2),
-      width: +(8 + Math.random() * 0.3).toFixed(2),
-      diameter: +(5 + Math.random() * 0.1).toFixed(2),
-    };
-
     try {
-      const result = await submitInspection({
-        partId: selectedPartId,
-        sessionId: activeSession?.sessionId || undefined,
-        status: isOk ? 'OK' : 'NG',
-        nilaiDimensi: dims,
+      // Kirim command ke backend untuk trigger CV
+      const response = await fetch('/api/operator/trigger-cv', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          sessionId: activeSession.sessionId
+        })
       });
 
-      const mapped = mapInspection(result);
-      manualInspectionId = mapped.id;  // Save manual inspection ID
-      measurements = dims;
-      resultStatus = mapped.status;
-      hasResult = true;
-      todayInspected++;
-
-      recentInspections = [mapped, ...recentInspections.slice(0, 4)];
-
-      if (resultStatus === 'NG') {
-        todayNg++;
-        showNgOverlay = true;
-        playAlarm();
+      if (!response.ok) {
+        throw new Error('Failed to trigger CV inspection');
       }
+
+      // Hasil akan datang via SSE (inspection-update event)
+      // UI sudah handle di onMount → connectSSE
+
+    } catch (err) {
+      error = err.message;
+      inspecting = false;
+    }
+  }
+
+  // Online mode functions
+  async function loadCameras() {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      availableCameras = devices.filter(device => device.kind === 'videoinput');
+      if (availableCameras.length > 0) {
+        selectedCamera = availableCameras[availableCameras.length - 1].deviceId; // Default to last camera (usually USB)
+      }
+    } catch (err) {
+      error = 'Gagal load daftar kamera: ' + err.message;
+    }
+  }
+
+  async function startCamera() {
+    try {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { 
+          deviceId: selectedCamera ? { exact: selectedCamera } : undefined,
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
+      });
+      
+      if (videoElement) {
+        videoElement.srcObject = stream;
+      }
+    } catch (err) {
+      error = 'Gagal akses kamera: ' + err.message;
+    }
+  }
+
+  function stopCamera() {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      stream = null;
+    }
+  }
+
+  async function capturePhoto() {
+    if (!videoElement) return;
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = 1920;
+    canvas.height = 1080;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+    
+    const blob = await new Promise(resolve => 
+      canvas.toBlob(resolve, 'image/jpeg', 0.85)
+    );
+    
+    capturedImage = URL.createObjectURL(blob);
+  }
+
+  async function submitOnlineInspection() {
+    if (!selectedPartId || !activeSession || !referenceName || !capturedImage) {
+      error = 'Pilih part dan reference terlebih dahulu';
+      return;
+    }
+
+    onlineProcessing = true;
+    error = '';
+
+    try {
+      // Convert captured image back to blob
+      const response = await fetch(capturedImage);
+      const imageBlob = await response.blob();
+
+      const formData = new FormData();
+      formData.append('image', imageBlob, 'inspection.jpg');
+      formData.append('partId', selectedPartId);
+      formData.append('sessionId', activeSession.sessionId);
+      formData.append('referenceName', referenceName);
+
+      const apiResponse = await fetch('/api/operator/inspect/online', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+
+      if (!apiResponse.ok) {
+        const errorData = await apiResponse.json();
+        throw new Error(errorData.message || 'Inspeksi gagal');
+      }
+
+      // Reset state
+      capturedImage = null;
+      referenceName = '';
+      
+      // Hasil akan muncul via SSE seperti mode lokal
+
     } catch (err) {
       error = err.message;
     } finally {
-      inspecting = false;
-      // Clear manual ID after 2 seconds to allow SSE updates
-      setTimeout(() => { manualInspectionId = null; }, 2000);
+      onlineProcessing = false;
+    }
+  }
+
+  function switchMode(newMode) {
+    inspectionMode = newMode;
+    if (newMode === 'online') {
+      loadCameras();
+    } else {
+      stopCamera();
+      capturedImage = null;
     }
   }
 
@@ -186,6 +292,8 @@
     // Subscribe SSE - terima hasil inspeksi dari CV secara real-time
     eventSource = connectSSE((eventType, data) => {
       if (eventType === 'inspection-update') {
+        cvLastSeen = Date.now();  // Update CV last seen timestamp
+        
         const mapped = {
           id:           data.inspectionId,
           part:         data.partCode || data.idPart || '-',
@@ -213,11 +321,9 @@
         measurements = mapped.dimensions;
         resultStatus  = mapped.status;
         hasResult     = true;
-        inspecting    = false;  // Reset inspecting state
-        lastCvResult  = mapped;
+        inspecting    = false;
       }
       if (eventType === 'ng-alert') {
-        ngAlertData   = data;
         showNgOverlay = true;
         playAlarm();
       }
@@ -225,6 +331,7 @@
   });
   onDestroy(() => {
     eventSource?.close();
+    stopCamera();
   });
 </script>
 
@@ -297,42 +404,155 @@
     <div class="inspect-grid">
       <!-- Left: Camera Feed -->
       <div class="camera-section">
-        <div class="section-label">{$t('operator.live_camera')}</div>
-        <div class="camera-feed">
-          <div class="camera-placeholder">
-            <div class="camera-circle"></div>
-            <div class="crosshair h"></div>
-            <div class="crosshair v"></div>
-            <div class="corner tl"></div>
-            <div class="corner tr"></div>
-            <div class="corner bl"></div>
-            <div class="corner br"></div>
-            {#if !inspecting && !hasResult}
-              <p class="camera-hint">{$t('operator.align_part')}</p>
-            {/if}
-            {#if inspecting}
-              <div class="scan-line"></div>
-            {/if}
-          </div>
-          <div class="camera-badge" class:connected={cameraConnected}>
-            <span class="dot"></span>
-            {cameraConnected ? $t('operator.camera_connected') : $t('operator.camera_disconnected')}
-          </div>
+        <!-- Mode Toggle -->
+        <div class="mode-toggle">
+          <button 
+            class="mode-btn"
+            class:active={inspectionMode === 'local'}
+            onclick={() => switchMode('local')}
+          >
+            🖥️ Mode Lokal
+          </button>
+          <button 
+            class="mode-btn"
+            class:active={inspectionMode === 'online'}
+            onclick={() => switchMode('online')}
+          >
+            📱 Mode Online
+          </button>
         </div>
 
-        <!-- Inspect Button -->
-        <button
-          class="inspect-btn"
-          class:inspecting
-          onclick={startInspection}
-          disabled={inspecting || !selectedPartId}
-        >
-          {#if inspecting}
-            <span class="spinner"></span> {$t('operator.inspecting')}
-          {:else}
-            <Scan size={22} /> {$t('operator.inspect_btn')}
-          {/if}
-        </button>
+        <div class="section-label">{$t('operator.live_camera')}</div>
+        
+        {#if inspectionMode === 'local'}
+          <!-- Local Mode: CV Camera Feed -->
+          <div class="camera-feed">
+            <div class="camera-placeholder">
+              <img 
+                src="http://localhost:5000/video_feed" 
+                alt="CV Camera Feed"
+                class="camera-video"
+                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"
+                onload="this.style.display='block'; this.nextElementSibling.style.display='none'"
+              />
+              <div class="camera-fallback" style="display: flex;">
+                <div class="camera-circle"></div>
+                <div class="crosshair h"></div>
+                <div class="crosshair v"></div>
+                <div class="corner tl"></div>
+                <div class="corner tr"></div>
+                <div class="corner bl"></div>
+                <div class="corner br"></div>
+                {#if !inspecting && !hasResult}
+                  <p class="camera-hint">{$t('operator.align_part')}</p>
+                {/if}
+                {#if inspecting}
+                  <div class="scan-line"></div>
+                {/if}
+              </div>
+            </div>
+            <div class="camera-badge" class:connected={cvOnline}>
+              <span class="dot"></span>
+              {cvOnline ? 'CV Online' : 'CV Offline'}
+            </div>
+          </div>
+
+          <!-- Local Mode Inspect Button -->
+          <button
+            class="inspect-btn"
+            class:inspecting
+            onclick={startInspection}
+            disabled={inspecting || !selectedPartId || !activeSession || !cvOnline}
+          >
+            {#if inspecting}
+              <span class="spinner"></span> Triggering CV...
+            {:else}
+              <Scan size={22} /> {$t('operator.inspect_btn')}
+            {/if}
+          </button>
+        {:else}
+          <!-- Online Mode: USB/Webcam Camera -->
+          <div class="online-mode-container">
+            {#if !capturedImage}
+              <div class="online-controls" style="margin-bottom: var(--sp-3);">
+                <label class="label">Pilih Kamera</label>
+                <select 
+                  class="select" 
+                  bind:value={selectedCamera}
+                  onchange={startCamera}
+                  style="width: 100%; padding: 12px; font-size: 14px; margin-bottom: 8px;"
+                >
+                  {#each availableCameras as camera}
+                    <option value={camera.deviceId}>
+                      {camera.label || `Camera ${availableCameras.indexOf(camera) + 1}`}
+                    </option>
+                  {/each}
+                </select>
+              </div>
+
+              <div class="camera-feed">
+                <div class="camera-placeholder">
+                  <video 
+                    bind:this={videoElement}
+                    autoplay 
+                    playsinline
+                    class="camera-video"
+                    style="display: block;"
+                  ></video>
+                  <div class="camera-badge connected">
+                    <span class="dot"></span>
+                    Kamera Aktif
+                  </div>
+                </div>
+              </div>
+              
+              <div class="online-controls">
+                <input 
+                  type="text" 
+                  class="input" 
+                  bind:value={referenceName}
+                  placeholder="Nama Reference (contoh: Bearing_50mm)"
+                  style="width: 100%; padding: 12px; font-size: 14px; border: 1px solid var(--clr-border); border-radius: 8px;"
+                />
+                <button
+                  class="inspect-btn"
+                  onclick={capturePhoto}
+                  disabled={!selectedPartId || !activeSession || !referenceName}
+                >
+                  📸 Ambil Foto
+                </button>
+              </div>
+            {:else}
+              <div class="camera-feed">
+                <div class="camera-placeholder">
+                  <img src={capturedImage} alt="Preview" class="camera-video" style="display: block;" />
+                </div>
+              </div>
+              
+              <div class="online-actions">
+                <button
+                  class="inspect-btn"
+                  onclick={submitOnlineInspection}
+                  disabled={onlineProcessing}
+                >
+                  {#if onlineProcessing}
+                    <span class="spinner"></span> Memproses...
+                  {:else}
+                    ✅ Kirim Inspeksi
+                  {/if}
+                </button>
+                <button
+                  class="btn btn-secondary"
+                  onclick={() => capturedImage = null}
+                  disabled={onlineProcessing}
+                  style="padding: 16px 32px; font-size: 1.1rem; min-height: 56px;"
+                >
+                  🔄 Foto Ulang
+                </button>
+              </div>
+            {/if}
+          </div>
+        {/if}
       </div>
 
       <!-- Right: Results + History -->
@@ -392,8 +612,11 @@
     <!-- Status Bar -->
     <div class="status-bar">
       <span class="status-item">
-        <span class="dot" class:connected={cameraConnected}></span>
-        {cameraConnected ? $t('operator.camera_connected') : $t('operator.camera_disconnected')}
+        <span class="dot" class:connected={cvOnline}></span>
+        {cvOnline ? 'CV Online' : 'CV Offline'}
+        {#if cvLastSeen}
+          <span style="font-size: 10px; opacity: 0.7;">({Math.floor((Date.now() - cvLastSeen) / 1000)}s ago)</span>
+        {/if}
       </span>
       <span class="status-item">{$t('operator.inspected_today')}: <strong>{todayInspected}</strong></span>
       <span class="status-item">NG: <strong>{todayNg}</strong> ({todayInspected > 0 ? ((todayNg/todayInspected)*100).toFixed(1) : 0}%)</span>
@@ -535,6 +758,19 @@
     background:
       radial-gradient(circle at center, rgba(0,51,153,0.03) 0%, transparent 70%),
       var(--clr-surface);
+  }
+  .camera-video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: none;
+  }
+  .camera-fallback {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .camera-circle {
     width: 120px;
@@ -910,6 +1146,58 @@
       padding: 12px var(--sp-8);
       font-size: 1.1rem;
     }
+  }
+
+  /* Mode Toggle */
+  .mode-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: var(--sp-3);
+  }
+
+  .mode-btn {
+    flex: 1;
+    padding: 12px 16px;
+    font-size: 14px;
+    font-weight: var(--fw-semibold);
+    background: var(--clr-surface);
+    border: 2px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .mode-btn:hover {
+    background: var(--clr-surface-2);
+  }
+
+  .mode-btn.active {
+    background: var(--clr-accent);
+    color: white;
+    border-color: var(--clr-accent);
+  }
+
+  /* Online Mode */
+  .online-mode-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    flex: 1;
+  }
+
+  .online-controls {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+
+  .online-actions {
+    display: flex;
+    gap: var(--sp-3);
+  }
+
+  .online-actions button {
+    flex: 1;
   }
 </style>
 
