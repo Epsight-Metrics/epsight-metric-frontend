@@ -1,9 +1,7 @@
 // Centralized API client — JWT auth, error handling, token management
-if (!import.meta.env.VITE_API_URL) {
-  throw new Error('VITE_API_URL environment variable is required');
-}
-
-const API_BASE = `${import.meta.env.VITE_API_URL}/api`;
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
 
 
 let activeToken = null;
@@ -83,7 +81,7 @@ export async function apiFetch(endpoint, options = {}) {
         // Attempt to refresh token
         const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'X-Requested-With': 'XMLHttpRequest'
           },

@@ -1,11 +1,9 @@
-﻿// SSE Notifications — real-time event stream
+// SSE Notifications — real-time event stream
 import { getToken } from '$lib/api/client.js';
 
-if (!import.meta.env.VITE_API_URL) {
-  throw new Error('VITE_API_URL environment variable is required');
-}
-
-const API_BASE = `${import.meta.env.VITE_API_URL}/api`;
+const API_BASE = import.meta.env.VITE_API_URL 
+  ? `${import.meta.env.VITE_API_URL}/api` 
+  : '/api';
 
 /**
  * Create an SSE connection to the notifications stream.
