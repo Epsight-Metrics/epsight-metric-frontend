@@ -1,6 +1,6 @@
 <script>
   import { t } from '$lib/i18n.js';
-  import { Scan, AlertTriangle, Volume2, ClipboardList, CheckCircle, XCircle, CircleDot, Circle, Check, Monitor, Smartphone } from '@lucide/svelte';
+  import { Scan, AlertTriangle, Volume2, ClipboardList, CheckCircle, XCircle, CircleDot, Circle, Check, Monitor, Smartphone, Database } from '@lucide/svelte';
   import { onMount, onDestroy } from 'svelte';
   import { getSession, startSession, stopSession, submitInspection, getParts } from '$lib/api/operator.js';
   import { connectSSE } from '$lib/api/notifications.js';
@@ -19,6 +19,8 @@
 
   // Data
   let measurements = $state({});
+  let deviations = $state({});
+  let referenceMatched = $state('');
   let selectedPartId = $state(null);
   let parts = $state([]);
   let recentInspections = $state([]);
@@ -475,7 +477,13 @@
           todayInspected++;
           if (mapped.status === 'NG') todayNg++;
         }
-        measurements = mapped.dimensions;
+        
+        // Update measurements, deviations, dan reference
+        const dims = data.nilaiDimensi || {};
+        measurements = dims.measurements || dims;
+        deviations = dims.deviations || {};
+        referenceMatched = dims.referenceMatched || data.matchedRef || '';
+        
         resultStatus  = mapped.status;
         hasResult     = true;
         inspecting    = false;
@@ -1001,12 +1009,38 @@
         <div class="section-label">{$t('operator.result')}</div>
 
         {#if hasResult}
+          <!-- Reference Info (jika ada) -->
+          {#if referenceMatched}
+            <div class="reference-info animate-fade-in">
+              <div class="ref-badge">
+                <Database size={14} /> Reference: <strong>{referenceMatched}</strong>
+              </div>
+            </div>
+          {/if}
+
           <div class="measurements animate-fade-in">
             {#each Object.entries(measurements) as [key, val]}
-              <div class="measure-row">
+              {@const deviation = deviations[key]}
+              {@const hasDeviation = deviation !== undefined && deviation !== null}
+              {@const isOverTolerance = hasDeviation && Math.abs(deviation) > 0.1}
+              
+              <div class="measure-row" class:has-deviation={hasDeviation} class:over-tolerance={isOverTolerance}>
                 <span class="measure-label">{key}</span>
-                <span class="measure-value">{val} mm</span>
-                <span class="measure-check"><Check size={16} /></span>
+                <div class="measure-values">
+                  <span class="measure-value">{val} mm</span>
+                  {#if hasDeviation}
+                    <span class="deviation" class:negative={deviation < 0} class:positive={deviation > 0}>
+                      ({deviation > 0 ? '+' : ''}{deviation} mm)
+                    </span>
+                  {/if}
+                </div>
+                <span class="measure-check" class:warning={isOverTolerance}>
+                  {#if isOverTolerance}
+                    <AlertTriangle size={16} />
+                  {:else}
+                    <Check size={16} />
+                  {/if}
+                </span>
               </div>
             {/each}
           </div>
@@ -1402,6 +1436,23 @@
     max-height: 100%;
     overflow-y: auto;
   }
+  
+  .reference-info {
+    padding: var(--sp-3);
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-accent);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--sp-2);
+  }
+  
+  .ref-badge {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: var(--fs-sm);
+    color: var(--clr-accent);
+  }
+  
   .measurements {
     display: flex;
     flex-direction: column;
@@ -1415,22 +1466,57 @@
     border: 1px solid var(--clr-border);
     border-radius: var(--radius-md);
     gap: var(--sp-3);
+    transition: all 0.2s ease;
   }
+  
+  .measure-row.over-tolerance {
+    border-color: var(--clr-warning);
+    background: rgba(251, 191, 36, 0.05);
+  }
+  
   .measure-label {
     flex: 1;
     font-size: var(--fs-sm);
     color: var(--clr-text-muted);
     text-transform: capitalize;
   }
+  
+  .measure-values {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--sp-1);
+  }
+  
   .measure-value {
     font-family: var(--font-heading);
     font-size: var(--fs-xl);
     font-weight: var(--fw-bold);
     font-variant-numeric: tabular-nums;
   }
+  
+  .deviation {
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    font-family: 'Courier New', monospace;
+  }
+  
+  .deviation.positive {
+    color: var(--clr-warning);
+  }
+  
+  .deviation.negative {
+    color: var(--clr-ng);
+  }
+  
   .measure-check {
     color: var(--clr-ok);
     font-size: var(--fs-lg);
+  }
+  
+  .measure-check.warning {
+    color: var(--clr-warning);
+    animation: pulse 2s infinite;
   }
 
   /* Status Card */
