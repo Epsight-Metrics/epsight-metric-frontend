@@ -49,6 +49,7 @@
   // Detail modal state
   let selectedInspection = $state(null);
   let showDetailModal = $state(false);
+  let loadingDetail = $state(false);
 
   // Derived state untuk status CV online/offline
   let cvOnline = $derived(cvLastSeen && (Date.now() - cvLastSeen) < 60_000);
@@ -134,6 +135,72 @@
   function openDetailModal(inspection) {
     selectedInspection = inspection;
     showDetailModal = true;
+    
+    // ALWAYS fetch detail untuk memastikan data lengkap
+    console.log('[DEBUG] Opening modal for inspection:', inspection);
+    fetchInspectionDetail(inspection.id);
+  }
+  
+  async function fetchInspectionDetail(inspectionId) {
+    loadingDetail = true;
+    console.log('[DEBUG] Fetching detail for inspection ID:', inspectionId);
+    
+    try {
+      const API_BASE = import.meta.env.VITE_API_URL 
+        ? `${import.meta.env.VITE_API_URL}/api` 
+        : '/api';
+      
+      const res = await fetch(`${API_BASE}/operator/inspections/${inspectionId}`, {
+        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${getToken()}`
+        }
+      });
+      
+      console.log('[DEBUG] Response status:', res.status);
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('[DEBUG] Error response:', errorText);
+        throw new Error('Failed to fetch detail');
+      }
+      
+      const data = await res.json();
+      console.log('[DEBUG] Received data:', data);
+      
+      const inspection = data.inspection || data;
+      console.log('[DEBUG] Inspection object:', inspection);
+      console.log('[DEBUG] nilaiDimensi:', inspection.nilaiDimensi);
+      console.log('[DEBUG] matchedRef:', inspection.matchedRef);
+      
+      // Update selectedInspection dengan data lengkap
+      selectedInspection = {
+        ...selectedInspection,
+        dimensions: inspection.nilaiDimensi || {},
+        matchedRef: inspection.matchedRef || selectedInspection.matchedRef,
+        shape: inspection.shape || selectedInspection.shape,
+        timestamp: inspection.timestamp || selectedInspection.timestamp
+      };
+      
+      console.log('[DEBUG] Updated selectedInspection:', selectedInspection);
+      
+      // Update recentInspections juga
+      recentInspections = recentInspections.map(item =>
+        item.id === inspectionId
+          ? {
+              ...item,
+              dimensions: inspection.nilaiDimensi || item.dimensions,
+              matchedRef: inspection.matchedRef || item.matchedRef,
+              shape: inspection.shape || item.shape
+            }
+          : item
+      );
+    } catch (err) {
+      console.error('[DEBUG] Failed to fetch inspection detail:', err);
+      error = 'Gagal memuat detail inspeksi';
+    } finally {
+      loadingDetail = false;
+    }
   }
   
   function closeDetailModal() {
@@ -448,7 +515,13 @@
       </div>
       
       <div class="modal-body">
-        <div class="detail-status" class:ok={selectedInspection.status === 'OK'} class:ng={selectedInspection.status === 'NG'}>
+        {#if loadingDetail}
+          <div class="loading-detail">
+            <span class="spinner"></span>
+            <p>Memuat detail inspeksi...</p>
+          </div>
+        {:else}
+          <div class="detail-status" class:ok={selectedInspection.status === 'OK'} class:ng={selectedInspection.status === 'NG'}>
           {#if selectedInspection.status === 'OK'}
             <CheckCircle size={32} />
           {:else}
@@ -542,6 +615,7 @@
           <div class="tolerance-badge" class:within={selectedInspection.dimensions.within_tolerance}>
             {selectedInspection.dimensions.within_tolerance ? '✓ Dalam Toleransi' : '⚠ Di Luar Toleransi'}
           </div>
+        {/if}
         {/if}
       </div>
     </div>
@@ -1900,6 +1974,16 @@
     background: var(--clr-ng-bg);
     color: var(--clr-ng);
     border: 1px solid var(--clr-ng-border);
+  }
+  
+  .loading-detail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-12);
+    gap: var(--sp-3);
+    color: var(--clr-text-muted);
   }
 </style>
 
