@@ -715,7 +715,6 @@
   .btn-close { background: none; border: none; font-size: var(--fs-2xl); color: var(--clr-text-dim); cursor: pointer; padding: 0; transition: color 0.2s; line-height: 1; }
   .btn-close:hover { color: var(--clr-text); }
   .modal-body { display: flex; flex-direction: column; gap: var(--sp-5); }
-  .detail-section { }
   .section-title { font-size: var(--fs-md); font-weight: var(--fw-semibold); margin-bottom: var(--sp-3); color: var(--clr-text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
   .detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-3); font-size: var(--fs-sm); }
   .detail-grid .label { color: var(--clr-text-muted); font-weight: var(--fw-medium); }
@@ -767,12 +766,6 @@
   .deviation-cell.negative {
     color: #3b82f6;
   }
-  .no-measurements-msg {
-    font-size: var(--fs-sm);
-    color: var(--clr-text-dim);
-    text-align: center;
-    padding: var(--sp-4);
-  }
   .evidence-img { width: 100%; max-width: 500px; border-radius: var(--radius-lg); border: 1px solid var(--clr-border); }
   .no-evidence { text-align: center; padding: var(--sp-8); color: var(--clr-text-dim); background: var(--clr-surface-2); border-radius: var(--radius-lg); }
   .no-evidence p { margin-top: var(--sp-2); font-size: var(--fs-sm); }
@@ -793,21 +786,29 @@
       font-size: var(--fs-xs);
     }
     .filter-row {
-      flex-direction: column;
-      align-items: stretch;
       gap: var(--sp-2);
     }
-    .filter-input,
-    .filter-select,
-    .quick-filters,
-    .date-filter-group {
-      max-width: 100% !important;
-      width: 100% !important;
+    .filter-input {
+      max-width: 100%;
+      width: 100%;
+      flex: 1 1 calc(50% - var(--sp-2));
+    }
+    .filter-select {
+      max-width: 100%;
+      width: 100%;
+      flex: 1 1 100%;
+    }
+    .quick-filters {
+      width: 100%;
       flex: 1 1 100%;
     }
     .quick-btn {
       flex: 1;
       text-align: center;
+    }
+    .date-filter-group {
+      flex: 1 1 calc(50% - var(--sp-2));
+      min-width: 0;
     }
   }
 

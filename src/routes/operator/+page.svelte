@@ -507,14 +507,17 @@
 
 <!-- Detail Modal -->
 {#if showDetailModal && selectedInspection}
-  <div class="modal-overlay" onclick={closeDetailModal}>
-    <div class="modal-card" onclick={(e) => e.stopPropagation()}>
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="modal-overlay" onclick={closeDetailModal} role="presentation">
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div class="modal-card" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1">
       <div class="modal-header">
         <div>
-          <h3>Detail Inspeksi #{selectedInspection.id}</h3>
+          <h3 id="modal-title">Detail Inspeksi #{selectedInspection.id}</h3>
           <p class="modal-subtitle">{selectedInspection.partName} ({selectedInspection.part})</p>
         </div>
-        <button class="modal-close" onclick={closeDetailModal}>
+        <button class="modal-close" onclick={closeDetailModal} aria-label="Tutup modal">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
             <line x1="6" y1="6" x2="18" y2="18"/>
@@ -1614,31 +1617,6 @@
   }
   .history-part { flex: 1; }
   .history-time { color: var(--clr-text-dim); font-size: var(--fs-xs); }
-  .from-cv { border-left: 3px solid var(--clr-accent); }
-  .cv-badge {
-    display: inline-block;
-    padding: 0 4px;
-    background: var(--clr-accent);
-    color: #fff;
-    border-radius: 3px;
-    font-size: 9px;
-    font-weight: var(--fw-bold);
-    vertical-align: middle;
-    margin-left: 4px;
-  }
-  .history-meta {
-    flex: 1;
-    font-size: var(--fs-xs);
-    color: var(--clr-text-dim);
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-  }
-  .history-session {
-    font-family: 'Courier New', monospace;
-    font-size: 9px;
-    opacity: 0.7;
-  }
 
   /* Status Bar */
   .status-bar {

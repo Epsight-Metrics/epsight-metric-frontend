@@ -736,4 +736,57 @@
   .feedback-item.neutral {
     color: var(--clr-text-muted);
   }
+
+  @media (max-width: 768px) {
+    .page-header {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--sp-3);
+    }
+    .page-title {
+      font-size: var(--fs-xl);
+    }
+    .search-bar {
+      max-width: 100%;
+    }
+    .table-container {
+      overflow-x: auto;
+    }
+    table {
+      font-size: var(--fs-xs);
+      min-width: 700px;
+    }
+    .action-btns {
+      flex-direction: column;
+      gap: var(--sp-1);
+    }
+    .btn-icon {
+      width: 100%;
+      height: 28px;
+    }
+    .table-footer {
+      flex-direction: column;
+      gap: var(--sp-3);
+      align-items: center;
+    }
+    .modal {
+      padding: var(--sp-5);
+      max-width: 95vw;
+    }
+    .modal-title {
+      font-size: var(--fs-lg);
+    }
+    .modal-actions {
+      flex-direction: column-reverse;
+      gap: var(--sp-2);
+    }
+    .modal-actions .btn {
+      width: 100%;
+    }
+    .password-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--sp-2);
+    }
+  }
 </style>
