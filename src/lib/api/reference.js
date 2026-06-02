@@ -26,11 +26,11 @@ export async function saveReferenceFromImage(imageFile, name, cvConfig) {
   const formData = new FormData();
   formData.append('file', imageFile);
   formData.append('name', name);
-  formData.append('ppm', cvConfig.pixel_per_mm);
-  formData.append('tolerance_mm', cvConfig.tolerance_mm);
-  formData.append('contour_thresh', cvConfig.contour_thresh);
-  formData.append('min_area', cvConfig.contour_min_area);
-  formData.append('min_feature_mm', cvConfig.min_feature_mm);
+  formData.append('ppm', cvConfig.pixel_per_mm ?? cvConfig.pixelPerMm);
+  formData.append('tolerance_mm', cvConfig.tolerance_mm ?? cvConfig.toleranceMm);
+  formData.append('contour_thresh', cvConfig.contour_thresh ?? cvConfig.contourThresh);
+  formData.append('min_area', cvConfig.contour_min_area ?? cvConfig.contourMinArea);
+  formData.append('min_feature_mm', cvConfig.min_feature_mm ?? cvConfig.minFeatureMm);
 
   const res = await fetch(`${CV_API_URL}/save-reference`, {
     method: 'POST',
@@ -47,11 +47,11 @@ export async function saveReferenceFromStream(name, cvConfig) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name,
-      ppm: cvConfig.pixel_per_mm,
-      tolerance_mm: cvConfig.tolerance_mm,
-      contour_thresh: cvConfig.contour_thresh,
-      min_area: cvConfig.contour_min_area,
-      min_feature_mm: cvConfig.min_feature_mm
+      ppm: cvConfig.pixel_per_mm ?? cvConfig.pixelPerMm,
+      tolerance_mm: cvConfig.tolerance_mm ?? cvConfig.toleranceMm,
+      contour_thresh: cvConfig.contour_thresh ?? cvConfig.contourThresh,
+      min_area: cvConfig.contour_min_area ?? cvConfig.contourMinArea,
+      min_feature_mm: cvConfig.min_feature_mm ?? cvConfig.minFeatureMm
     })
   });
   

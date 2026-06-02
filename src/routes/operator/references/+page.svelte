@@ -1,8 +1,10 @@
 <script>
-  import { onMount } from 'svelte';
-  import { getReferences, saveReference, deleteReference } from '$lib/api/reference.js';
+  import { onMount, onDestroy } from 'svelte';
+  import { getReferences, saveReference, deleteReference, clearAllReferences, saveReferenceFromImage, saveReferenceFromStream } from '$lib/api/reference.js';
   import { getCalibration } from '$lib/api/engineer.js';
-  import { Database, Plus, Trash2, Check } from '@lucide/svelte';
+  import { connectSSE } from '$lib/api/notifications.js';
+  import { isAuthenticated } from '$lib/stores/auth.js';
+  import { Database, Plus, Trash2, Upload, AlertCircle, Check, Circle, Hexagon, Calendar, Clock, X } from '@lucide/svelte';
 
   let loading = $state(true);
   let saving = $state(false);
@@ -10,17 +12,23 @@
   let success = $state('');
   let references = $state([]);
   let cvConfig = $state(null);
-  let showAddForm = $state(false);
-  let useStream = $state(false);
-  let referenceName = $state('');
+  let eventSource = null;
+
+  let showAddForm = $state(false); // Default hidden, shown as modal on click
   let imageFile = $state(null);
+  let referenceName = $state('');
+  let uploadProgress = $state('');
+  let useStream = $state(false);
 
   async function loadReferences() {
+    if (!$isAuthenticated) return;
+    
     loading = true;
+    error = '';
+    
     try {
       const data = await getReferences();
       references = data.references || [];
-      cvConfig = await getCalibration();
     } catch (err) {
       error = err.message;
     } finally {
@@ -28,7 +36,36 @@
     }
   }
 
-  onMount(() => loadReferences());
+  async function loadCvConfig() {
+    try {
+      cvConfig = await getCalibration();
+    } catch (err) {
+      console.error('Failed to load CV config:', err);
+    }
+  }
+
+  onMount(() => {
+    loadReferences();
+    loadCvConfig();
+
+    eventSource = connectSSE(
+      (eventType, data) => {
+        if (eventType === 'reference-update') {
+          loadReferences();
+          
+          if (data.action === 'created') {
+            success = `Reference "${data.reference.name}" created`;
+            setTimeout(() => success = '', 3000);
+          }
+        }
+      },
+      (err) => console.error('SSE error:', err)
+    );
+  });
+
+  onDestroy(() => {
+    if (eventSource) eventSource.close();
+  });
 
   function handleFileSelect(event) {
     const file = event.target.files?.[0];
@@ -36,52 +73,117 @@
       imageFile = file;
       error = '';
     } else {
-      error = 'Format gambar tidak valid';
+      error = 'Please select a valid image file';
       imageFile = null;
     }
   }
 
-  async function handleSave() {
+  async function handleSaveFromStream() {
     if (!referenceName.trim()) {
-      error = 'Nama reference harus diisi';
+      error = 'Please provide reference name';
+      return;
+    }
+
+    if (!cvConfig) {
+      error = 'CV configuration not loaded';
       return;
     }
 
     saving = true;
     error = '';
+    uploadProgress = 'Capturing...';
 
     try {
-      // Simplified - manual input for now
-      // TODO: Integrate with CV API for auto-measurement
-      const ref = {
-        name: referenceName.trim(),
-        shape: 'circle',
-        vertices: 0,
-        diameterMm: 10.0,
-        widthMm: 10.0,
-        heightMm: 10.0,
-        toleranceMm: cvConfig?.toleranceMm || 1.0
-      };
+      const cvResult = await saveReferenceFromStream(referenceName.trim(), cvConfig);
+      
+      if (!cvResult.success) {
+        throw new Error(cvResult.error || 'Failed to capture from stream');
+      }
 
-      await saveReference(ref);
-      
-      showAddForm = false;
+      uploadProgress = 'Saving...';
+
+      const ref = cvResult.reference;
+      await saveReference({
+        name: ref.name,
+        shape: ref.shape,
+        vertices: ref.vertices,
+        diameterMm: ref.diameter_mm,
+        widthMm: ref.width_mm,
+        heightMm: ref.height_mm,
+        toleranceMm: ref.tolerance_mm
+      });
+
       referenceName = '';
-      imageFile = null;
+      uploadProgress = '';
+      showAddForm = false;
       
-      success = 'Reference tersimpan!';
+      success = `Reference "${ref.name}" saved!`;
       setTimeout(() => success = '', 3000);
       
       await loadReferences();
     } catch (err) {
       error = err.message;
+      uploadProgress = '';
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function handleSaveFromImage() {
+    if (!imageFile || !referenceName.trim()) {
+      error = 'Please provide both image and name';
+      return;
+    }
+
+    if (!cvConfig) {
+      error = 'CV configuration not loaded';
+      return;
+    }
+
+    saving = true;
+    error = '';
+    uploadProgress = 'Processing...';
+
+    try {
+      const cvResult = await saveReferenceFromImage(imageFile, referenceName.trim(), cvConfig);
+      
+      if (!cvResult.success) {
+        throw new Error(cvResult.error || 'Failed to process image');
+      }
+
+      uploadProgress = 'Saving...';
+
+      const ref = cvResult.reference;
+      await saveReference({
+        name: ref.name,
+        shape: ref.shape,
+        vertices: ref.vertices,
+        diameterMm: ref.diameter_mm,
+        widthMm: ref.width_mm,
+        heightMm: ref.height_mm,
+        toleranceMm: ref.tolerance_mm
+      });
+
+      imageFile = null;
+      referenceName = '';
+      uploadProgress = '';
+      showAddForm = false;
+      
+      success = `Reference "${ref.name}" saved!`;
+      setTimeout(() => success = '', 3000);
+      
+      await loadReferences();
+    } catch (err) {
+      error = err.message;
+      uploadProgress = '';
     } finally {
       saving = false;
     }
   }
 
   async function handleDelete(name) {
-    if (!confirm(`Hapus reference "${name}"?`)) return;
+    if (!confirm(`Delete reference "${name}"?`)) return;
+
     try {
       await deleteReference(name);
       await loadReferences();
@@ -89,123 +191,746 @@
       error = err.message;
     }
   }
+
+  async function handleClearAll() {
+    if (!confirm('Delete ALL references? This cannot be undone!')) return;
+
+    try {
+      await clearAllReferences();
+      await loadReferences();
+      success = 'All references cleared';
+      setTimeout(() => success = '', 3000);
+    } catch (err) {
+      error = err.message;
+    }
+  }
 </script>
 
-<svelte:head><title>Reference — EPSON QC</title></svelte:head>
+<svelte:head><title>Reference Management — EPSON QC</title></svelte:head>
 
 <div class="page animate-fade-in">
+  <!-- PAGE HEADER -->
   <div class="page-header">
-    <h1 class="page-title"><Database class="inline-icon" size={24} /> Reference</h1>
-    <button class="btn btn-primary" onclick={() => showAddForm = !showAddForm}>
-      <Plus size={16} /> {showAddForm ? 'Batal' : 'Tambah'}
-    </button>
+    <div>
+      <h1 class="page-title"><Database class="inline-icon mr-2 text-primary" size={24} /> Reference Management</h1>
+      <p class="page-sub">Kelola profil referensi dimensi part untuk inspeksi otomatis</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-primary btn-action" onclick={() => { showAddForm = true; imageFile = null; referenceName = ''; useStream = false; error = ''; }}>
+        <Plus size={16} class="inline-icon mr-2" />
+        Tambah Referensi
+      </button>
+      {#if references.length > 0}
+        <button class="btn btn-danger btn-action" onclick={handleClearAll}>
+          <Trash2 size={16} class="inline-icon mr-2" />
+          Clear All
+        </button>
+      {/if}
+    </div>
   </div>
 
+  <!-- ALERTS -->
   {#if error}
-    <div class="alert alert-error">{error}</div>
+    <div class="alert alert-error">
+      <AlertCircle size={14} class="inline-icon mr-2" />
+      {error}
+    </div>
   {/if}
 
   {#if success}
-    <div class="alert alert-success">{success}</div>
-  {/if}
-
-  {#if showAddForm}
-    <div class="card add-form">
-      <h3 class="card-title">Tambah Reference</h3>
-      
-      <div class="form-group">
-        <label class="label">Nama Reference</label>
-        <input class="input" type="text" placeholder="e.g., PT-001" bind:value={referenceName} disabled={saving} />
-      </div>
-
-      <div class="form-actions">
-        <button class="btn btn-primary" onclick={handleSave} disabled={saving || !referenceName.trim()}>
-          {#if saving}
-            <span class="spinner"></span> Menyimpan...
-          {:else}
-            <Check size={16} /> Simpan
-          {/if}
-        </button>
-        <button class="btn btn-secondary" onclick={() => { showAddForm = false; referenceName = ''; }} disabled={saving}>
-          Batal
-        </button>
-      </div>
+    <div class="alert alert-success">
+      <Check size={14} class="inline-icon mr-2" />
+      {success}
     </div>
   {/if}
 
-  {#if loading}
-    <div class="loading-center"><span class="spinner-lg"></span><p>Loading...</p></div>
-  {:else if references.length === 0}
-    <div class="empty-state">
-      <Database size={48} />
-      <h3>Belum ada reference</h3>
-      <p>Tambahkan reference untuk inspeksi otomatis</p>
-    </div>
-  {:else}
-    <div class="references-grid">
-      {#each references as ref (ref.id)}
-        <div class="ref-card">
-          <div class="ref-header">
-            <h4 class="ref-name">{ref.name}</h4>
-            <button class="btn-icon" onclick={() => handleDelete(ref.name)}>
-              <Trash2 size={16} />
-            </button>
-          </div>
-          
-          <div class="ref-details">
-            <div class="ref-row">
-              <span class="ref-label">Shape:</span>
-              <span class="ref-value">{ref.shape}</span>
-            </div>
-            
-            {#if ref.shape === 'circle'}
-              <div class="ref-row">
-                <span class="ref-label">Diameter:</span>
-                <span class="ref-value">{ref.diameterMm.toFixed(2)} mm</span>
+  <!-- MAIN LIST VIEW (FULL WIDTH) -->
+  <div class="ref-dashboard-layout">
+    {#if loading}
+      <div class="loading-center">
+        <span class="spinner-lg"></span>
+        <p>Loading references...</p>
+      </div>
+    {:else if references.length === 0}
+      <div class="empty-state">
+        <Database size={48} class="empty-icon" />
+        <h3>Belum ada referensi</h3>
+        <p>Tambahkan referensi part pertama Anda untuk memulai inspeksi otomatis</p>
+        <button class="btn btn-primary mt-4" onclick={() => { showAddForm = true; imageFile = null; referenceName = ''; useStream = false; error = ''; }}>
+          <Plus size={16} class="inline-icon mr-2" /> Tambah Sekarang
+        </button>
+      </div>
+    {:else}
+      <div class="references-list-wrapper">
+        <div class="references-grid">
+          {#each references as ref (ref.id)}
+            <div class="ref-card animate-fade-in" class:circle-card={ref.shape === 'circle'} class:polygon-card={ref.shape !== 'circle'}>
+              <div class="ref-header">
+                <div class="ref-title-group">
+                  {#if ref.shape === 'circle'}
+                    <Circle size={16} class="text-primary mr-2" />
+                  {:else}
+                    <Hexagon size={16} class="text-purple mr-2" />
+                  {/if}
+                  <h4 class="ref-name">{ref.name}</h4>
+                </div>
+                <button class="btn-icon btn-danger-compact" onclick={() => handleDelete(ref.name)}>
+                  <Trash2 size={14} />
+                </button>
               </div>
-            {:else}
-              <div class="ref-row">
-                <span class="ref-label">W × H:</span>
-                <span class="ref-value">{ref.widthMm.toFixed(2)} × {ref.heightMm.toFixed(2)} mm</span>
+              
+              <div class="ref-details">
+                <div class="ref-row">
+                  <span class="ref-label">Shape:</span>
+                  <span class="ref-value badge-shape" class:circle-badge={ref.shape === 'circle'}>{ref.shape}</span>
+                </div>
+                
+                {#if ref.shape === 'circle'}
+                  <div class="ref-row">
+                    <span class="ref-label">Diameter:</span>
+                    <span class="ref-value mono">{ref.diameterMm.toFixed(2)} mm</span>
+                  </div>
+                {:else}
+                  <div class="ref-row">
+                    <span class="ref-label">Width:</span>
+                    <span class="ref-value mono">{ref.widthMm.toFixed(2)} mm</span>
+                  </div>
+                  <div class="ref-row">
+                    <span class="ref-label">Height:</span>
+                    <span class="ref-value mono">{ref.heightMm.toFixed(2)} mm</span>
+                  </div>
+                {/if}
+                
+                <div class="ref-row">
+                  <span class="ref-label">Tolerance:</span>
+                  <span class="ref-value mono-tol">±{ref.toleranceMm.toFixed(2)} mm</span>
+                </div>
+                
+                <div class="ref-row">
+                  <span class="ref-label">Vertices:</span>
+                  <span class="ref-value">{ref.vertices}</span>
+                </div>
+                
+                <div class="ref-row border-top-line">
+                  <div class="time-container">
+                    <Calendar size={12} class="mr-1 text-dim" />
+                    <span class="time-val">{new Date(ref.createdAt).toLocaleDateString('id-ID')}</span>
+                    <span class="divider-dot">•</span>
+                    <Clock size={12} class="mr-1 text-dim" />
+                    <span class="time-val">{new Date(ref.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                </div>
               </div>
-            {/if}
-            
-            <div class="ref-row">
-              <span class="ref-label">Toleransi:</span>
-              <span class="ref-value">±{ref.toleranceMm.toFixed(2)} mm</span>
             </div>
-          </div>
+          {/each}
         </div>
-      {/each}
-    </div>
-  {/if}
+      </div>
+    {/if}
+  </div>
 </div>
 
+<!-- ADD NEW REFERENCE MODAL (SHOWN ON TOP OF THE PAGE) -->
+{#if showAddForm}
+  <div class="modal-overlay animate-fade-in" onclick={() => showAddForm = false}>
+    <div class="modal-card animate-scale-in" onclick={(e) => e.stopPropagation()}>
+      <div class="modal-header-bar">
+        <h3 class="modal-title-text"><Database class="inline-icon mr-2 text-primary" size={20} /> Add New Reference</h3>
+        <button class="modal-close" onclick={() => showAddForm = false}>
+          <X size={20} />
+        </button>
+      </div>
+
+      <div class="modal-body-content">
+        {#if error}
+          <div class="alert alert-error mb-3">
+            <AlertCircle size={14} class="inline-icon mr-2" />
+            {error}
+          </div>
+        {/if}
+
+        <div class="form-group">
+          <label class="label" for="refName">Reference Name</label>
+          <input 
+            class="input" 
+            id="refName" 
+            type="text" 
+            placeholder="e.g., Gear Kecil A"
+            bind:value={referenceName}
+            disabled={saving}
+          />
+        </div>
+
+        <!-- Toggle between Upload and Stream -->
+        <div class="source-toggle">
+          <button 
+            class="toggle-btn"
+            class:active={!useStream}
+            onclick={() => { useStream = false; imageFile = null; }}
+            disabled={saving}
+          >
+            <Upload size={14} class="mr-2" /> Upload Image
+          </button>
+          <button 
+            class="toggle-btn"
+            class:active={useStream}
+            onclick={() => { useStream = true; imageFile = null; }}
+            disabled={saving}
+          >
+            <Database size={14} class="mr-2" /> Capture from Live Stream
+          </button>
+        </div>
+
+        {#if !useStream}
+          <div class="form-group">
+            <label class="label" for="refImage">Select Image</label>
+            <div class="upload-area">
+              <input 
+                type="file" 
+                id="refImage" 
+                accept="image/*"
+                onchange={handleFileSelect}
+                disabled={saving}
+                class="file-input"
+              />
+              <div class="upload-label">
+                <Upload size={32} class="upload-icon" />
+                <p class="filename-text">{imageFile ? imageFile.name : 'Select file or drag & drop'}</p>
+                <p class="hint">Ensure only ONE object is visible in the frame</p>
+              </div>
+            </div>
+          </div>
+        {:else}
+          <div class="stream-preview">
+            <div class="stream-container">
+              <img 
+                src="http://localhost:5000/video_feed" 
+                alt="CV Stream"
+                class="stream-video"
+                onerror={(e) => { e.target.style.display='none'; e.target.nextElementSibling.style.display='flex'; }}
+                onload={(e) => { e.target.style.display='block'; e.target.nextElementSibling.style.display='none'; }}
+              />
+              <div class="stream-fallback" style="display: flex;">
+                <p>CV Stream not available</p>
+              </div>
+            </div>
+            <p class="hint text-center">Position ONE object in the frame, then click Save</p>
+          </div>
+        {/if}
+
+        {#if uploadProgress}
+          <div class="progress-info">
+            <span class="spinner"></span>
+            {uploadProgress}
+          </div>
+        {/if}
+      </div>
+
+      <div class="modal-footer-bar">
+        <button 
+          class="btn btn-primary flex-1 btn-save" 
+          onclick={useStream ? handleSaveFromStream : handleSaveFromImage}
+          disabled={saving || (!useStream && (!imageFile || !referenceName.trim())) || (useStream && !referenceName.trim())}
+        >
+          {#if saving}
+            <span class="spinner"></span> Saving...
+          {:else}
+            <Check size={16} class="inline-icon mr-2" /> Save Reference
+          {/if}
+        </button>
+        <button 
+          class="btn btn-secondary btn-cancel" 
+          onclick={() => showAddForm = false}
+          disabled={saving}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
-  .page { padding: var(--sp-6); }
-  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-6); padding-bottom: var(--sp-4); border-bottom: 1px solid var(--clr-border); }
-  .page-title { font-size: var(--fs-2xl); font-weight: var(--fw-bold); }
-  .inline-icon { display: inline-block; vertical-align: middle; margin-right: 8px; }
-  .alert { padding: var(--sp-3); border-radius: var(--radius-md); margin-bottom: var(--sp-4); }
-  .alert-error { background: var(--clr-ng-bg); color: var(--clr-ng); }
-  .alert-success { background: var(--clr-ok-bg); color: var(--clr-ok); }
-  .add-form { margin-bottom: var(--sp-6); }
-  .card-title { font-size: var(--fs-lg); font-weight: var(--fw-semibold); margin-bottom: var(--sp-4); }
-  .form-actions { display: flex; gap: var(--sp-3); margin-top: var(--sp-4); }
-  .loading-center { display: flex; flex-direction: column; align-items: center; gap: var(--sp-4); padding: var(--sp-12); }
-  .spinner-lg { width: 32px; height: 32px; border: 3px solid var(--clr-border); border-top-color: var(--clr-accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
-  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .empty-state { text-align: center; padding: var(--sp-12); color: var(--clr-text-muted); }
-  .references-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--sp-4); }
-  .ref-card { background: var(--clr-surface); border: 1px solid var(--clr-border); border-radius: var(--radius-md); padding: var(--sp-4); }
-  .ref-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-3); padding-bottom: var(--sp-3); border-bottom: 1px solid var(--clr-border); }
-  .ref-name { font-size: var(--fs-md); font-weight: var(--fw-semibold); }
-  .btn-icon { padding: var(--sp-2); border: none; background: transparent; cursor: pointer; border-radius: var(--radius-sm); }
-  .btn-icon:hover { background: var(--clr-ng-bg); color: var(--clr-ng); }
+  .page { 
+    max-width: 100%; 
+    height: 100%; 
+    padding: var(--sp-4) var(--sp-5); 
+    display: flex; 
+    flex-direction: column; 
+    overflow: hidden; 
+    box-sizing: border-box;
+  }
+
+  .page-header { 
+    display: flex; 
+    align-items: center; 
+    justify-content: space-between; 
+    padding-bottom: var(--sp-3); 
+    border-bottom: 1px solid var(--clr-border); 
+    margin-bottom: var(--sp-4);
+    flex-shrink: 0;
+  }
+
+  .page-title { 
+    font-family: var(--font-heading); 
+    font-size: var(--fs-xl); 
+    font-weight: var(--fw-bold); 
+    margin-bottom: var(--sp-1); 
+    color: var(--clr-text); 
+  }
+
+  .page-sub { 
+    color: var(--clr-text-muted); 
+    font-size: var(--fs-xs); 
+  }
+
+  .header-actions { 
+    display: flex; 
+    gap: var(--sp-3); 
+  }
+
+  .btn-action {
+    padding: var(--sp-2) var(--sp-4);
+    font-size: var(--fs-sm);
+  }
+
+  .alert { 
+    padding: var(--sp-2) var(--sp-3); 
+    border-radius: var(--radius-md); 
+    margin-bottom: var(--sp-3); 
+    font-size: var(--fs-xs); 
+    flex-shrink: 0;
+  }
+
+  .alert-error { background: var(--clr-ng-bg); color: var(--clr-ng); border: 1px solid var(--clr-ng-border); }
+  .alert-success { background: var(--clr-ok-bg); color: var(--clr-ok); border: 1px solid rgba(34, 197, 94, 0.2); }
+
+  /* FULL WIDTH LAYOUT */
+  .ref-dashboard-layout {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* LIST WRAPPER */
+  .references-list-wrapper {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    padding-right: var(--sp-2);
+  }
+
+  .references-grid { 
+    display: grid; 
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); 
+    gap: var(--sp-4); 
+    padding-bottom: var(--sp-4);
+  }
+
+  /* PREMIUM CARDS STYLE */
+  .ref-card { 
+    background: var(--clr-surface); 
+    border: 1px solid var(--clr-border); 
+    border-radius: var(--radius-md); 
+    padding: var(--sp-4); 
+    transition: all 0.3s ease; 
+    height: fit-content;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+  }
+
+  .ref-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+  }
+
+  .ref-card.circle-card::before {
+    background: var(--clr-accent);
+  }
+
+  .ref-card.polygon-card::before {
+    background: #c084fc; /* light purple */
+  }
+
+  .ref-card:hover { 
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06); 
+  }
+  
+  .ref-card.circle-card:hover {
+    border-color: var(--clr-accent);
+  }
+
+  .ref-card.polygon-card:hover {
+    border-color: #c084fc;
+  }
+  
+  .ref-header { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    margin-bottom: var(--sp-3); 
+    padding-bottom: var(--sp-2); 
+    border-bottom: 1px solid var(--clr-border); 
+  }
+
+  .ref-title-group {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .ref-name { 
+    font-size: var(--fs-sm); 
+    font-weight: var(--fw-semibold); 
+    color: var(--clr-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .btn-icon { 
+    padding: var(--sp-1); 
+    border: none; 
+    background: transparent; 
+    cursor: pointer; 
+    border-radius: var(--radius-sm); 
+    transition: all 0.2s ease; 
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .btn-icon.btn-danger-compact { color: var(--clr-text-muted); }
+  .btn-icon.btn-danger-compact:hover { background: var(--clr-ng-bg); color: var(--clr-ng); }
+
   .ref-details { display: flex; flex-direction: column; gap: var(--sp-2); }
-  .ref-row { display: flex; justify-content: space-between; font-size: var(--fs-sm); }
-  .ref-label { color: var(--clr-text-muted); }
+  .ref-row { display: flex; justify-content: space-between; align-items: center; font-size: var(--fs-xs); }
+  
+  .ref-row.border-top-line {
+    border-top: 1px dashed var(--clr-border);
+    padding-top: var(--sp-2);
+    margin-top: var(--sp-1);
+  }
+  
+  .ref-label { color: var(--clr-text-muted); font-weight: var(--fw-medium); }
   .ref-value { color: var(--clr-text); font-weight: var(--fw-medium); }
-  @media (max-width: 768px) { .references-grid { grid-template-columns: 1fr; } }
+
+  .badge-shape {
+    font-size: 10px;
+    padding: 2px var(--sp-2);
+    border-radius: var(--radius-sm);
+    background: rgba(192, 132, 252, 0.15);
+    color: #a855f7;
+    font-weight: var(--fw-semibold);
+    text-transform: capitalize;
+  }
+
+  .badge-shape.circle-badge {
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--clr-accent);
+  }
+
+  .time-container {
+    display: flex;
+    align-items: center;
+    color: var(--clr-text-dim);
+    font-size: 10px;
+    width: 100%;
+  }
+
+  .time-val {
+    margin-left: 2px;
+  }
+
+  .divider-dot {
+    margin: 0 var(--sp-2);
+    color: var(--clr-border);
+  }
+
+  .mono { font-family: 'Courier New', monospace; color: var(--clr-accent); font-weight: var(--fw-semibold); }
+  .mono-tol { font-family: 'Courier New', monospace; color: var(--clr-warning); font-weight: var(--fw-semibold); }
+
+  .loading-center { 
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    justify-content: center; 
+    flex: 1;
+    color: var(--clr-text-muted); 
+  }
+
+  .spinner-lg { 
+    width: 24px; 
+    height: 24px; 
+    border: 2px solid var(--clr-border); 
+    border-top-color: var(--clr-accent); 
+    border-radius: 50%; 
+    animation: spin 0.6s linear infinite; 
+  }
+
+  .spinner { 
+    display: inline-block; 
+    width: 12px; 
+    height: 12px; 
+    border: 2px solid rgba(255,255,255,0.4); 
+    border-top-color: #fff; 
+    border-radius: 50%; 
+    animation: spin 0.6s linear infinite; 
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty-state { 
+    text-align: center; 
+    padding: var(--sp-12) var(--sp-4); 
+    color: var(--clr-text-muted); 
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--clr-surface);
+    border: 1px dashed var(--clr-border);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--sp-4);
+  }
+
+  .empty-icon { color: var(--clr-border); margin-bottom: var(--sp-3); }
+
+  .inline-icon { display: inline-block; vertical-align: middle; margin-top: -2px; }
+  .mr-2 { margin-right: 8px; }
+  .mr-1 { margin-right: 4px; }
+  .text-primary { color: var(--clr-accent); }
+  .text-purple { color: #a855f7; }
+  .text-dim { color: var(--clr-text-dim); }
+
+  /* ========================================= */
+  /* MODAL OVERLAY OVERRIDE FOR DESKTOP VIEW   */
+  /* ========================================= */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(15, 23, 42, 0.65); /* Modern slate backdrop */
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-4);
+    animation: fadeIn 0.2s ease;
+  }
+
+  .modal-card {
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-lg);
+    width: 500px;
+    max-width: 100%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+  }
+
+  .modal-header-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--sp-4) var(--sp-5);
+    border-bottom: 1px solid var(--clr-border);
+    background: var(--clr-surface-2);
+    flex-shrink: 0;
+  }
+
+  .modal-title-text {
+    font-size: var(--fs-md);
+    font-weight: var(--fw-semibold);
+    color: var(--clr-text);
+  }
+
+  .modal-close {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--clr-text-muted);
+    transition: color 0.2s;
+    padding: var(--sp-1);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-close:hover {
+    color: var(--clr-text);
+    background: var(--clr-border-light);
+  }
+
+  .modal-body-content {
+    padding: var(--sp-5);
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .modal-footer-bar {
+    display: flex;
+    gap: var(--sp-3);
+    padding: var(--sp-4) var(--sp-5);
+    border-top: 1px solid var(--clr-border);
+    background: var(--clr-surface-2);
+    flex-shrink: 0;
+  }
+
+  .btn-cancel {
+    padding: 0 var(--sp-5);
+    font-size: var(--fs-sm);
+    height: 38px;
+  }
+
+  /* TOGGLE BUTTONS COMPACT */
+  .source-toggle {
+    display: flex;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-4);
+  }
+
+  .toggle-btn {
+    flex: 1;
+    height: 36px;
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-medium);
+    background: var(--clr-bg);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .toggle-btn:hover {
+    background: var(--clr-surface-2);
+  }
+
+  .toggle-btn.active {
+    background: var(--clr-accent);
+    color: white;
+    border-color: var(--clr-accent);
+  }
+
+  /* FILE UPLOAD COMPACT */
+  .upload-area {
+    position: relative;
+    border: 2px dashed var(--clr-border);
+    border-radius: var(--radius-md);
+    padding: var(--sp-6) var(--sp-4);
+    text-align: center;
+    background: var(--clr-surface-2);
+    transition: all 0.2s ease;
+  }
+
+  .file-input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    z-index: 2;
+  }
+
+  .upload-area:hover {
+    border-color: var(--clr-accent);
+    background: var(--clr-surface);
+  }
+
+  .upload-icon {
+    color: var(--clr-accent);
+    margin: 0 auto var(--sp-3);
+  }
+
+  .filename-text {
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    margin-bottom: 2px;
+    word-break: break-all;
+  }
+
+  /* LIVE VIDEO CONTAINER COMPACT */
+  .stream-preview {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+  }
+
+  .stream-container {
+    position: relative;
+    width: 100%;
+    height: 220px;
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--clr-surface-2);
+  }
+
+  .stream-video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: none;
+  }
+
+  .stream-fallback {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--clr-text-dim);
+    font-size: var(--fs-xs);
+  }
+
+  /* KEYFRAME ANIMATIONS */
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes scaleIn {
+    from { transform: scale(0.95); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* ========================================= */
+  /* RESPONSIVE MEDIA QUERIES                  */
+  /* ========================================= */
+  @media (max-width: 768px) {
+    .page-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--sp-3);
+    }
+    .header-actions {
+      width: 100%;
+      justify-content: space-between;
+    }
+    .modal-card {
+      width: 100%;
+      max-height: 95vh;
+    }
+  }
 </style>

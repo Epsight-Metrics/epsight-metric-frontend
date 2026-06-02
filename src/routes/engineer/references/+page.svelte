@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { getReferences, saveReference, deleteReference, clearAllReferences, saveReferenceFromImage } from '$lib/api/reference.js';
+  import { getReferences, saveReference, deleteReference, clearAllReferences, saveReferenceFromImage, saveReferenceFromStream } from '$lib/api/reference.js';
   import { getCalibration } from '$lib/api/engineer.js';
   import { connectSSE } from '$lib/api/notifications.js';
   import { isAuthenticated } from '$lib/stores/auth.js';

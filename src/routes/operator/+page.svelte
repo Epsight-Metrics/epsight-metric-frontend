@@ -710,7 +710,7 @@
               />
               <!-- Bounding Box Overlay Canvas -->
               {#if detections.objects && detections.objects.length > 0}
-                <svg class="bbox-overlay" viewBox="0 0 {videoStreamSize.width} {videoStreamSize.height}" preserveAspectRatio="xMidYMid slice">
+                <svg class="bbox-overlay" viewBox="0 0 {videoStreamSize.width} {videoStreamSize.height}" preserveAspectRatio="none">
                   <defs>
                     <!-- Define filters for glow effects -->
                     <filter id="glow">
@@ -1280,7 +1280,8 @@
   }
   .camera-placeholder {
     width: 100%;
-    height: 400px;
+    aspect-ratio: 16 / 9;
+    height: auto;
     border: 2px solid var(--clr-border);
     border-radius: var(--radius-lg);
     position: relative;
@@ -1296,7 +1297,7 @@
   .camera-video {
     width: 100%;
     height: 100%;
-    object-fit: contain;
+    object-fit: fill;
     display: none;
   }
   .bbox-overlay {
@@ -1730,13 +1731,65 @@
   @media (max-width: 1024px) {
     .inspect-grid { 
       grid-template-columns: 1fr;
-      grid-template-rows: 1fr 1fr;
+      grid-template-rows: auto;
+      height: auto;
+      min-height: auto;
+      max-height: none;
     }
-    .camera-placeholder { min-height: 250px; }
-    .history-list { max-height: 200px; }
+    .camera-section {
+      max-height: none;
+      min-height: auto;
+    }
+    .results-section {
+      max-height: none;
+      min-height: auto;
+      overflow-y: visible;
+    }
+    .history-section {
+      min-height: auto;
+      max-height: none;
+      overflow: visible;
+      margin-top: var(--sp-4);
+    }
+    .history-list { 
+      max-height: 350px; 
+      overflow-y: auto;
+    }
+    .camera-placeholder { 
+      height: auto; 
+      min-height: auto; 
+    }
+  }
+
+  @media (max-width: 768px) {
+    .session-bar {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--sp-3);
+      padding: var(--sp-3);
+    }
+    .session-info {
+      justify-content: space-between;
+      width: 100%;
+    }
+    .part-selector {
+      width: 100%;
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--sp-1);
+    }
+    .part-selector .select {
+      width: 100%;
+      min-width: 0;
+      min-height: 44px;
+    }
+    .inspect-grid {
+      padding: var(--sp-3);
+      gap: var(--sp-4);
+    }
   }
   
-  @media (max-height: 768px) {
+  @media (max-height: 768px) and (min-width: 1025px) {
     .session-bar {
       padding: var(--sp-2) var(--sp-4);
     }

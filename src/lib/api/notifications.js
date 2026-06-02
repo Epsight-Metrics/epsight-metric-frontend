@@ -50,6 +50,15 @@ export function connectSSE(onMessage, onError) {
     }
   });
 
+  eventSource.addEventListener('reference-update', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      onMessage('reference-update', data);
+    } catch (err) {
+      console.error('Failed to parse reference-update:', err);
+    }
+  });
+
   eventSource.onerror = (err) => {
     console.error('SSE connection error:', err);
     if (onError) onError(err);
