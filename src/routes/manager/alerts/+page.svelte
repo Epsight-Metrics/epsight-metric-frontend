@@ -127,6 +127,45 @@
       fetchAlerts();
     }, 300);
   });
+  // Helper to format dimensions and ignore coordinates/debug fields
+  function formatDimensions(dimensions) {
+    const debugKeys = ['contour', 'bbox', 'rot_box', 'center'];
+    return Object.entries(dimensions || {})
+      .filter(([key]) => {
+        const lowerKey = key.toLowerCase();
+        return !debugKeys.some(dk => lowerKey.includes(dk));
+      })
+      .map(([key, val]) => {
+        let displayKey = key.replace(/_/g, ' ');
+        let unit = '';
+
+        if (key.endsWith('_mm')) {
+          displayKey = displayKey.replace(' mm', '');
+          unit = ' mm';
+        } else if (key.endsWith('_mm2')) {
+          displayKey = displayKey.replace(' mm2', '');
+          unit = ' mm²';
+        } else if (key.endsWith('_px')) {
+          displayKey = displayKey.replace(' px', '');
+          unit = ' px';
+        } else if (['width', 'height', 'diameter', 'radius', 'perimeter'].includes(key.toLowerCase())) {
+          unit = ' mm';
+        }
+
+        let displayVal = val;
+        if (typeof val === 'number') {
+          displayVal = val.toFixed(2);
+        } else if (typeof val === 'string' && val.trim() !== '' && !isNaN(Number(val))) {
+          displayVal = Number(val).toFixed(2);
+        }
+
+        return {
+          key: displayKey,
+          value: displayVal,
+          unit: unit
+        };
+      });
+  }
 </script>
 
 <svelte:head><title>{$t('manager.alert_summary')} — EPSON QC</title></svelte:head>
@@ -177,8 +216,8 @@
           <p class="alert-detail">Vendor: {alert.vendor}</p>
           <p class="alert-detail">Operator: {alert.operator}</p>
           <div class="alert-dims">
-            {#each Object.entries(alert.dimensions) as [key, val]}
-              <span class="dim-badge">{key}: {val}mm</span>
+            {#each formatDimensions(alert.dimensions) as dim}
+              <span class="dim-badge">{dim.key}: {dim.value}{dim.unit}</span>
             {/each}
           </div>
         </div>
@@ -265,7 +304,15 @@
   .alert-part { font-size: var(--fs-md); font-weight: var(--fw-semibold); margin-bottom: var(--sp-2); }
   .alert-detail { font-size: var(--fs-sm); color: var(--clr-text-muted); margin-bottom: var(--sp-1); }
   .alert-dims { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin-top: var(--sp-2); }
-  .dim-badge { font-size: var(--fs-xs); padding: 2px var(--sp-2); background: var(--clr-surface-2); border-radius: var(--radius-sm); }
+  .dim-badge {
+    font-size: var(--fs-xs);
+    padding: 2px var(--sp-2);
+    background: var(--clr-surface-2);
+    border-radius: var(--radius-sm);
+    max-width: 100%;
+    word-break: break-all;
+    white-space: normal;
+  }
   code { background: var(--clr-surface-2); padding: 1px 6px; border-radius: 4px; font-size: var(--fs-xs); }
   .no-alerts { text-align: center; padding: var(--sp-12); color: var(--clr-text-dim); grid-column: 1 / -1; }
   .no-alerts-icon { font-size: 3rem; display: block; margin-bottom: var(--sp-3); }

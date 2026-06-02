@@ -4,6 +4,7 @@
   import { t } from "$lib/i18n.js";
 
   let { children } = $props();
+  let sidebarOpen = $state(false);
 
   const navItems = $derived([
     { href: "/auditor", iconName: "logs", label: $t("nav.inspection_logs") },
@@ -21,9 +22,9 @@
 </script>
 
 <div class="auditor-layout">
-  <Header role="auditor" title={$t("auditor.title")} />
+  <Header role="auditor" title={$t("auditor.title")} onMenuClick={() => sidebarOpen = !sidebarOpen} />
   <div class="auditor-body">
-    <Sidebar items={navItems} role="auditor" />
+    <Sidebar items={navItems} role="auditor" isOpen={sidebarOpen} onclose={() => sidebarOpen = false} />
     <main class="auditor-main">
       {@render children()}
     </main>
@@ -48,5 +49,22 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+  }
+
+  @media (max-width: 768px) {
+    .auditor-layout {
+      height: auto;
+      min-height: 100vh;
+      overflow: visible;
+    }
+    .auditor-body {
+      height: auto;
+      overflow: visible;
+    }
+    .auditor-main {
+      height: auto;
+      overflow: visible;
+      padding: var(--sp-4);
+    }
   }
 </style>

@@ -143,7 +143,11 @@
         if (item.status === 'NG' || item.status === 'NO GOOD') {
           vendorMap[vendor].ng++;
           Object.keys(item.nilaiDimensi || {}).forEach(dim => {
-            dimMap[dim] = (dimMap[dim] || 0) + 1;
+            const lowerDim = dim.toLowerCase();
+            const debugKeys = ['contour', 'bbox', 'rot_box', 'center', 'shape', 'vertices'];
+            if (!debugKeys.some(dk => lowerDim.includes(dk))) {
+              dimMap[dim] = (dimMap[dim] || 0) + 1;
+            }
           });
         }
       });

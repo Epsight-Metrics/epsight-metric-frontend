@@ -1,15 +1,17 @@
 <script>
   import Header from "$lib/components/shared/Header.svelte";
   import { t } from "$lib/i18n.js";
-  import { page } from '$app/stores';
-  import { Camera, Sliders, Database, X } from '@lucide/svelte';
+  import { page } from "$app/stores";
+  import { Camera, Sliders, Database, X } from "@lucide/svelte";
 
   let { children } = $props();
-  
+
   let currentPath = $derived($page.url.pathname);
-  let isInspect = $derived(currentPath === '/operator' || currentPath === '/operator/');
-  let isCalibration = $derived(currentPath.includes('/calibration'));
-  let isReferences = $derived(currentPath.includes('/references'));
+  let isInspect = $derived(
+    currentPath === "/operator" || currentPath === "/operator/",
+  );
+  let isCalibration = $derived(currentPath.includes("/calibration"));
+  let isReferences = $derived(currentPath.includes("/references"));
 
   let sidebarOpen = $state(false);
 
@@ -23,56 +25,97 @@
 </script>
 
 <div class="operator-layout">
-  <Header role="operator" title={$t("nav.live_inspect")} onMenuClick={toggleSidebar}>
+  <Header
+    role="operator"
+    title={$t("nav.live_inspect")}
+    onMenuClick={toggleSidebar}
+  >
     {#snippet navigation()}
       <nav class="header-nav">
         <a href="/operator" class="nav-item" class:active={isInspect}>
           <Camera size={16} /> Inspeksi
         </a>
-        <a href="/operator/calibration" class="nav-item" class:active={isCalibration}>
+        <a
+          href="/operator/calibration"
+          class="nav-item"
+          class:active={isCalibration}
+        >
           <Sliders size={16} /> Kalibrasi
         </a>
-        <a href="/operator/references" class="nav-item" class:active={isReferences}>
-          <Database size={16} /> Reference
+        <a
+          href="/operator/references"
+          class="nav-item"
+          class:active={isReferences}
+        >
+          <Database size={16} /> Referensi
         </a>
       </nav>
     {/snippet}
   </Header>
-  
+
   <!-- Sidebar Backdrop (only visible on mobile/tablet when sidebar is open) -->
-  <button 
-    class="sidebar-backdrop" 
-    class:visible={sidebarOpen} 
-    onclick={closeSidebar} 
+  <button
+    class="sidebar-backdrop"
+    class:visible={sidebarOpen}
+    onclick={closeSidebar}
     aria-label="Close navigation sidebar"
   ></button>
-  
+
   <!-- Sidebar Drawer (only active/visible on mobile/tablet) -->
   <aside class="sidebar-drawer" class:open={sidebarOpen}>
     <div class="sidebar-header">
       <div class="sidebar-brand">
         <div class="brand-mark">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
-            <circle cx="12" cy="12" r="3"/>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+            <circle cx="12" cy="12" r="3" />
           </svg>
         </div>
         <span class="brand-text">EPSON QC</span>
       </div>
-      <button class="sidebar-close-btn" onclick={closeSidebar} aria-label="Close sidebar">
+      <button
+        class="sidebar-close-btn"
+        onclick={closeSidebar}
+        aria-label="Close sidebar"
+      >
         <X size={18} />
       </button>
     </div>
-    
+
     <nav class="sidebar-nav">
-      <a href="/operator" class="sidebar-nav-item" class:active={isInspect} onclick={closeSidebar}>
+      <a
+        href="/operator"
+        class="sidebar-nav-item"
+        class:active={isInspect}
+        onclick={closeSidebar}
+      >
         <Camera size={18} /> <span>Inspeksi</span>
       </a>
-      <a href="/operator/calibration" class="sidebar-nav-item" class:active={isCalibration} onclick={closeSidebar}>
+      <a
+        href="/operator/calibration"
+        class="sidebar-nav-item"
+        class:active={isCalibration}
+        onclick={closeSidebar}
+      >
         <Sliders size={18} /> <span>Kalibrasi</span>
       </a>
-      <a href="/operator/references" class="sidebar-nav-item" class:active={isReferences} onclick={closeSidebar}>
-        <Database size={18} /> <span>Reference</span>
+      <a
+        href="/operator/references"
+        class="sidebar-nav-item"
+        class:active={isReferences}
+        onclick={closeSidebar}
+      >
+        <Database size={18} /> <span>Referensi</span>
       </a>
     </nav>
   </aside>
@@ -90,13 +133,13 @@
     background: var(--clr-bg);
     overflow: hidden;
   }
-  
+
   .header-nav {
     display: flex;
     gap: var(--sp-2);
     align-items: center;
   }
-  
+
   .nav-item {
     display: flex;
     align-items: center;
@@ -111,17 +154,17 @@
     height: 32px;
     box-sizing: border-box;
   }
-  
+
   .nav-item:hover {
     background: var(--clr-surface-2);
     color: var(--clr-text);
   }
-  
+
   .nav-item.active {
     background: var(--clr-accent);
     color: white;
   }
-  
+
   .operator-main {
     flex: 1;
     display: flex;
@@ -129,7 +172,7 @@
     overflow: hidden;
     min-height: 0;
   }
-  
+
   .sidebar-backdrop {
     display: none;
   }
@@ -137,7 +180,7 @@
   .sidebar-drawer {
     display: none;
   }
-  
+
   @media (max-width: 768px) {
     .sidebar-backdrop {
       display: block;

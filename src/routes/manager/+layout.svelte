@@ -4,6 +4,7 @@
   import { t } from "$lib/i18n.js";
 
   let { children } = $props();
+  let sidebarOpen = $state(false);
 
   const navItems = $derived([
     { href: "/manager", iconName: "dashboard", label: $t("nav.dashboard") },
@@ -13,9 +14,9 @@
 </script>
 
 <div class="manager-layout">
-  <Header role="manager" title={$t("manager.title")} />
+  <Header role="manager" title={$t("manager.title")} onMenuClick={() => sidebarOpen = !sidebarOpen} />
   <div class="manager-body">
-    <Sidebar items={navItems} role="manager" />
+    <Sidebar items={navItems} role="manager" isOpen={sidebarOpen} onclose={() => sidebarOpen = false} />
     <main class="manager-main">
       {@render children()}
     </main>
@@ -40,5 +41,22 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+  }
+
+  @media (max-width: 768px) {
+    .manager-layout {
+      height: auto;
+      min-height: 100vh;
+      overflow: visible;
+    }
+    .manager-body {
+      height: auto;
+      overflow: visible;
+    }
+    .manager-main {
+      height: auto;
+      overflow: visible;
+      padding: var(--sp-4);
+    }
   }
 </style>

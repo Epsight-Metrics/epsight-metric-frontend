@@ -12,10 +12,11 @@
     Link, 
     Shield, 
     Settings,
-    Database
+    Database,
+    X
   } from '@lucide/svelte';
 
-  let { items = [], role = 'operator' } = $props();
+  let { items = [], role = 'operator', isOpen = false, onclose } = $props();
 
   const iconComponents = {
     users: Users,
@@ -41,13 +42,37 @@
   }
 </script>
 
-<aside class="sidebar">
+<!-- Sidebar Backdrop for Mobile Drawer -->
+<button
+  class="sidebar-backdrop"
+  class:visible={isOpen}
+  onclick={onclose}
+  aria-label="Close sidebar"
+></button>
+
+<aside class="sidebar" class:open={isOpen}>
+  <div class="sidebar-header-mobile">
+    <div class="sidebar-brand">
+      <div class="brand-mark">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </div>
+      <span class="brand-text">EPSON QC</span>
+    </div>
+    <button class="sidebar-close-btn" onclick={onclose} aria-label="Close sidebar">
+      <X size={18} />
+    </button>
+  </div>
+
   <nav class="sidebar-nav">
     {#each items as item}
       <a
         href={item.href}
         class="nav-item"
         class:active={isActive(item.href)}
+        onclick={() => onclose?.()}
       >
         <span class="nav-icon">
           {#if iconComponents[item.iconName]}
@@ -136,5 +161,100 @@
     background: var(--clr-ng-bg);
     color: var(--clr-ng);
     border-left-color: var(--clr-ng);
+  }
+
+  .sidebar-backdrop {
+    display: none;
+  }
+  
+  .sidebar-header-mobile {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    .sidebar-backdrop {
+      display: block;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.4);
+      backdrop-filter: blur(2px);
+      z-index: 999;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      border: none;
+      padding: 0;
+      cursor: default;
+    }
+    .sidebar-backdrop.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 280px;
+      background: var(--clr-surface);
+      height: 100vh;
+      z-index: 1000;
+      transform: translateX(-100%);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      border-right: 1px solid var(--clr-border);
+      box-shadow: var(--shadow-lg);
+    }
+    .sidebar.open {
+      transform: translateX(0);
+    }
+
+    .sidebar-header-mobile {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: var(--header-height);
+      padding: 0 var(--sp-4);
+      border-bottom: 1px solid var(--clr-border);
+      flex-shrink: 0;
+    }
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+    }
+    .brand-mark {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      background: var(--clr-accent);
+      color: #fff;
+      border-radius: var(--radius-md);
+    }
+    .brand-text {
+      font-family: var(--font-heading);
+      font-size: var(--fs-md);
+      font-weight: var(--fw-bold);
+      color: var(--clr-accent);
+      letter-spacing: 1px;
+    }
+    .sidebar-close-btn {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: var(--clr-text-muted);
+      padding: var(--sp-1);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--transition-fast);
+    }
+    .sidebar-close-btn:hover {
+      background: var(--clr-surface-2);
+      color: var(--clr-text);
+    }
   }
 </style>

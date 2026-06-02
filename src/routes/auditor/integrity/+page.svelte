@@ -374,5 +374,39 @@
   .pagination { display: flex; align-items: center; gap: var(--sp-2); }
   .page-num { font-weight: var(--fw-medium); color: var(--clr-text-muted); }
   .page { display: flex; flex-direction: column; flex: 1; overflow: hidden; height: 100%; }
-  .table-container { flex: 1; overflow-y: auto; }
+  .table-container { flex: 1; overflow-y: auto; overflow-x: auto; }
+
+  @media (max-width: 768px) {
+    .summary-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: var(--sp-3);
+    }
+    .filter-row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--sp-2);
+    }
+    .quick-filters,
+    .date-filter-group {
+      max-width: 100% !important;
+      width: 100% !important;
+      flex: 1 1 100%;
+    }
+    .quick-btn {
+      flex: 1;
+      text-align: center;
+    }
+    .info-badge {
+      display: block;
+      margin-left: 0;
+      margin-top: var(--sp-2);
+      width: fit-content;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .summary-grid {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>

@@ -19,6 +19,8 @@
   let activeQuickFilter = $state('');
   let selectedInspection = $state(null);
   let showDetailModal = $state(false);
+  let viewMode = $state('list'); // 'list' | 'session'
+  let expandedSessionId = $state(null);
 
   let totalPages = $derived(Math.ceil(total / limit) || 1);
   let abortController;
@@ -53,6 +55,7 @@
         id: item.id,
         timestamp: new Date(item.timestamp).toLocaleString('id-ID'),
         rawTimestamp: item.timestamp,
+        rawDate: new Date(item.timestamp),
         partName: item.part?.partName || '-',
         partCode: item.part?.partCode || '-',
         vendor: item.part?.vendorName || '-',
@@ -172,6 +175,148 @@
       fetchInspections();
     }, 300);
   });
+
+  // Parse actual, reference, and deviations for detailed display
+  function parseDetailedDimensions(dimensions) {
+    if (!dimensions) return [];
+
+    const items = [];
+
+    const formatVal = (val) => {
+      if (typeof val === 'number') return val.toFixed(2);
+      if (typeof val === 'string' && val.trim() !== '' && !isNaN(Number(val))) return Number(val).toFixed(2);
+      return val;
+    };
+
+    const getUnit = (key) => {
+      if (key.endsWith('_mm')) return ' mm';
+      if (key.endsWith('_mm2')) return ' mm²';
+      if (key.endsWith('_px')) return ' px';
+      if (['width', 'height', 'diameter', 'radius', 'perimeter'].includes(key.toLowerCase())) return ' mm';
+      return '';
+    };
+
+    const getCleanName = (key) => {
+      let name = key.replace(/_/g, ' ');
+      if (key.endsWith('_mm')) name = name.replace(' mm', '');
+      else if (key.endsWith('_mm2')) name = name.replace(' mm2', '');
+      else if (key.endsWith('_px')) name = name.replace(' px', '');
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    };
+
+    // Check Case B (Nested structure)
+    if (dimensions.measurements && typeof dimensions.measurements === 'object') {
+      const measurements = dimensions.measurements;
+      const deviations = dimensions.deviations || {};
+      const references = dimensions.references || {};
+
+      Object.entries(measurements).forEach(([key, actVal]) => {
+        if (['contour', 'bbox', 'rot_box', 'center', 'shape', 'vertices'].some(dk => key.toLowerCase().includes(dk))) {
+          return;
+        }
+
+        const devVal = deviations[key];
+        let refVal = references[key];
+
+        if (refVal === undefined && actVal !== undefined && devVal !== undefined) {
+          if (typeof actVal === 'number' && typeof devVal === 'number') {
+            refVal = actVal - devVal;
+          } else if (!isNaN(Number(actVal)) && !isNaN(Number(devVal))) {
+            refVal = Number(actVal) - Number(devVal);
+          }
+        }
+
+        items.push({
+          name: getCleanName(key),
+          actual: formatVal(actVal),
+          reference: refVal !== undefined ? formatVal(refVal) : '-',
+          deviation: devVal !== undefined ? formatVal(devVal) : '-',
+          unit: getUnit(key)
+        });
+      });
+    } else {
+      // Case A (Flat structure)
+      Object.entries(dimensions).forEach(([key, val]) => {
+        const lowerKey = key.toLowerCase();
+        if (
+          lowerKey.startsWith('reference_') || 
+          lowerKey.startsWith('deviation_') ||
+          ['contour', 'bbox', 'rot_box', 'center', 'shape', 'vertices', 'measurements', 'deviations', 'references', 'cvdetail', 'referencematched'].some(dk => lowerKey.includes(dk))
+        ) {
+          return;
+        }
+
+        const refKey = `reference_${key}`;
+        const devKey = `deviation_${key}`;
+
+        const actVal = val;
+        const refVal = dimensions[refKey];
+        const devVal = dimensions[devKey];
+
+        items.push({
+          name: getCleanName(key),
+          actual: formatVal(actVal),
+          reference: refVal !== undefined ? formatVal(refVal) : '-',
+          deviation: devVal !== undefined ? formatVal(devVal) : '-',
+          unit: getUnit(key)
+        });
+      });
+    }
+
+    return items;
+  }
+
+  let sessions = $derived.by(() => {
+    const groups = {};
+    inspections.forEach(item => {
+      const sId = item.sessionId || '-';
+      if (!groups[sId]) {
+        groups[sId] = {
+          sessionId: sId,
+          operator: item.operator,
+          inspections: [],
+          okCount: 0,
+          ngCount: 0,
+          minTime: null,
+          maxTime: null
+        };
+      }
+      groups[sId].inspections.push(item);
+      if (item.status === 'OK') {
+        groups[sId].okCount++;
+      } else {
+        groups[sId].ngCount++;
+      }
+      
+      const itemTime = item.rawDate;
+      if (itemTime) {
+        if (!groups[sId].minTime || itemTime < groups[sId].minTime) {
+          groups[sId].minTime = itemTime;
+        }
+        if (!groups[sId].maxTime || itemTime > groups[sId].maxTime) {
+          groups[sId].maxTime = itemTime;
+        }
+      }
+    });
+
+    return Object.values(groups).map(g => {
+      let timeStr = '-';
+      if (g.minTime && g.maxTime) {
+        const minStr = g.minTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        const maxStr = g.maxTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        const dateStr = g.minTime.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        timeStr = minStr === maxStr ? `${dateStr}, ${minStr}` : `${dateStr}, ${minStr} - ${maxStr}`;
+      }
+      return {
+        ...g,
+        timeStr
+      };
+    });
+  });
+
+  function toggleExpandSession(sessionId) {
+    expandedSessionId = expandedSessionId === sessionId ? null : sessionId;
+  }
 </script>
 
 <svelte:head><title>{$t('auditor.inspection_logs')} — EPSON QC</title></svelte:head>
@@ -179,9 +324,21 @@
 <div class="page animate-fade-in">
   <div class="page-header">
     <h1 class="page-title">{$t('auditor.inspection_logs')}</h1>
-    <div class="export-btns">
-      <button class="btn btn-secondary" onclick={() => handleExport('csv')}><Download size={15} />{$t('auditor.export_csv')}</button>
-      <button class="btn btn-secondary" onclick={() => handleExport('pdf')}><FileText size={15} />{$t('auditor.export_pdf')}</button>
+    <div style="display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap;">
+      <div class="view-toggle">
+        <button class="toggle-btn" class:active={viewMode === 'list'} onclick={() => viewMode = 'list'}>
+          <svg class="toggle-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          Daftar Inspeksi
+        </button>
+        <button class="toggle-btn" class:active={viewMode === 'session'} onclick={() => viewMode = 'session'}>
+          <svg class="toggle-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Grup Sesi Kerja
+        </button>
+      </div>
+      <div class="export-btns">
+        <button class="btn btn-secondary" onclick={() => handleExport('csv')}><Download size={15} />{$t('auditor.export_csv')}</button>
+        <button class="btn btn-secondary" onclick={() => handleExport('pdf')}><FileText size={15} />{$t('auditor.export_pdf')}</button>
+      </div>
     </div>
   </div>
 
@@ -224,49 +381,131 @@
   <div class="table-container">
     <table>
       <thead>
-        <tr>
-          <th>ID</th>
-          <th>Waktu</th>
-          <th>Part</th>
-          <th>Vendor</th>
-          <th>Status</th>
-          <th>Operator</th>
-          <th>Evidence</th>
-          <th>Actions</th>
-        </tr>
+        {#if viewMode === 'list'}
+          <tr>
+            <th>ID</th>
+            <th>Waktu</th>
+            <th>Part</th>
+            <th>Vendor</th>
+            <th>Status</th>
+            <th>Operator</th>
+            <th>Evidence</th>
+          </tr>
+        {:else}
+          <tr>
+            <th></th>
+            <th>ID Sesi</th>
+            <th>Operator</th>
+            <th>Waktu Sesi</th>
+            <th>Total Part</th>
+            <th>Hasil Sesi</th>
+            <th></th>
+          </tr>
+        {/if}
       </thead>
       <tbody>
-        {#each inspections as item}
-          <tr>
-            <td><code>#{item.id}</code></td>
-            <td class="dim">{item.timestamp}</td>
-            <td><strong>{item.partName}</strong><br/><span class="dim">{item.partCode}</span></td>
-            <td>{item.vendor}</td>
-            <td><span class="badge" class:badge-ok={item.status === 'OK'} class:badge-ng={item.status === 'NG'}>{item.status}</span></td>
-            <td>{item.operator}<br/><span class="dim">{item.operatorUsername}</span></td>
-            <td>
-              <div class="evidence-cell">
-                {#if item.imagePath}
-                  <span class="evidence-icon-wrapper" title="Photo Evidence">
-                    <Camera size={15} class="text-blue-500" />
-                  </span>
+        {#if viewMode === 'list'}
+          {#each inspections as item}
+            <tr class="clickable" onclick={() => viewDetail(item)}>
+              <td><code>#{item.id}</code></td>
+              <td class="dim">{item.timestamp}</td>
+              <td><strong>{item.partName}</strong><br/><span class="dim">{item.partCode}</span></td>
+              <td>{item.vendor}</td>
+              <td><span class="badge" class:badge-ok={item.status === 'OK'} class:badge-ng={item.status === 'NG'}>{item.status}</span></td>
+              <td>{item.operator}<br/><span class="dim">{item.operatorUsername}</span></td>
+              <td>
+                <div class="evidence-cell">
+                  {#if item.imagePath}
+                    <span class="evidence-icon-wrapper" title="Bukti Foto">
+                      <Camera size={15} class="text-blue-500" />
+                    </span>
+                  {/if}
+                  {#if parseDetailedDimensions(item.dimensions).length > 0}
+                    <span class="evidence-icon-wrapper" title="Data Pengukuran">
+                      <BarChart2 size={15} class="text-emerald-500" />
+                    </span>
+                  {/if}
+                </div>
+              </td>
+            </tr>
+          {/each}
+          {#if inspections.length === 0}
+            <tr><td colspan="7" class="no-data">{$t('common.no_data')}</td></tr>
+          {/if}
+        {:else}
+          {#each sessions as session}
+            <tr class="clickable" onclick={() => toggleExpandSession(session.sessionId)}>
+              <td class="expand-icon" style="vertical-align: middle;">
+                {#if expandedSessionId === session.sessionId}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                {:else}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
                 {/if}
-                {#if Object.keys(item.dimensions).length > 0}
-                  <span class="evidence-icon-wrapper" title="Measurement Data">
-                    <BarChart2 size={15} class="text-emerald-500" />
-                  </span>
+              </td>
+              <td><code>{session.sessionId}</code></td>
+              <td><strong>{session.operator}</strong></td>
+              <td class="dim">{session.timeStr}</td>
+              <td>{session.inspections.length} Part</td>
+              <td>
+                <span class="badge badge-ok">{session.okCount} OK</span>
+                {#if session.ngCount > 0}
+                  <span class="badge badge-ng" style="margin-left: var(--sp-1);">{session.ngCount} NG</span>
                 {/if}
-              </div>
-            </td>
-            <td>
-              <button class="btn-icon btn-view" title="View Detail" onclick={() => viewDetail(item)}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-              </button>
-            </td>
-          </tr>
-        {/each}
-        {#if inspections.length === 0}
-          <tr><td colspan="8" class="no-data">{$t('common.no_data')}</td></tr>
+              </td>
+              <td></td>
+            </tr>
+            {#if expandedSessionId === session.sessionId}
+              <tr class="detail-row animate-fade-in">
+                <td colspan="7">
+                  <div class="session-detail-container animate-fade-in">
+                    <h4 class="session-subtitle">Daftar Inspeksi Sesi</h4>
+                    <div class="session-table-wrapper">
+                      <table class="session-inspections-table">
+                        <thead>
+                          <tr>
+                            <th>ID</th>
+                            <th>Waktu</th>
+                            <th>Part</th>
+                            <th>Vendor</th>
+                            <th>Status</th>
+                            <th>Evidence</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {#each session.inspections as item}
+                            <tr class="clickable" onclick={(e) => { e.stopPropagation(); viewDetail(item); }}>
+                              <td><code>#{item.id}</code></td>
+                              <td class="dim">{new Date(item.rawTimestamp).toLocaleTimeString('id-ID')}</td>
+                              <td><strong>{item.partName}</strong> (Code: <code>{item.partCode}</code>)</td>
+                              <td>{item.vendor}</td>
+                              <td><span class="badge" class:badge-ok={item.status === 'OK'} class:badge-ng={item.status === 'NG'}>{item.status}</span></td>
+                              <td>
+                                <div class="evidence-cell">
+                                  {#if item.imagePath}
+                                    <span class="evidence-icon-wrapper" title="Bukti Foto">
+                                      <Camera size={15} class="text-blue-500" />
+                                    </span>
+                                  {/if}
+                                  {#if parseDetailedDimensions(item.dimensions).length > 0}
+                                    <span class="evidence-icon-wrapper" title="Data Pengukuran">
+                                      <BarChart2 size={15} class="text-emerald-500" />
+                                    </span>
+                                  {/if}
+                                </div>
+                              </td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            {/if}
+          {/each}
+          {#if inspections.length === 0}
+            <tr><td colspan="7" class="no-data">{$t('common.no_data')}</td></tr>
+          {/if}
         {/if}
       </tbody>
     </table>
@@ -287,6 +526,7 @@
 
 <!-- Detail Modal -->
 {#if showDetailModal && selectedInspection}
+  {@const parsedDims = parseDetailedDimensions(selectedInspection.dimensions)}
   <div 
     class="modal-backdrop" 
     role="button" 
@@ -296,39 +536,51 @@
   >
     <div class="modal animate-fade-in">
       <div class="modal-header">
-        <h2 class="modal-title">Inspection Evidence #{selectedInspection.id}</h2>
+        <h2 class="modal-title">Bukti Inspeksi #{selectedInspection.id}</h2>
         <button class="btn-close" onclick={() => showDetailModal = false}>✕</button>
       </div>
       
       <div class="modal-body">
         <div class="detail-section">
-          <h3 class="section-title">Basic Info</h3>
+          <h3 class="section-title">Informasi Dasar</h3>
           <div class="detail-grid">
-            <div><span class="label">Timestamp:</span> {selectedInspection.timestamp}</div>
+            <div><span class="label">Waktu:</span> {selectedInspection.timestamp}</div>
             <div><span class="label">Operator:</span> {selectedInspection.operator}</div>
             <div><span class="label">Status:</span> <span class="badge" class:badge-ok={selectedInspection.status === 'OK'} class:badge-ng={selectedInspection.status === 'NG'}>{selectedInspection.status}</span></div>
-            <div><span class="label">Session ID:</span> <code>{selectedInspection.sessionId || '-'}</code></div>
+            <div><span class="label">ID Sesi:</span> <code>{selectedInspection.sessionId || '-'}</code></div>
           </div>
         </div>
 
         <div class="detail-section">
-          <h3 class="section-title">Part Info</h3>
+          <h3 class="section-title">Informasi Part</h3>
           <div class="detail-grid">
-            <div><span class="label">Part Code:</span> <code>{selectedInspection.partCode}</code></div>
-            <div><span class="label">Part Name:</span> {selectedInspection.partName}</div>
+            <div><span class="label">Kode Part:</span> <code>{selectedInspection.partCode}</code></div>
+            <div><span class="label">Nama Part:</span> {selectedInspection.partName}</div>
             <div><span class="label">Vendor:</span> {selectedInspection.vendor}</div>
             <div><span class="label">ID Part:</span> {selectedInspection.idPart || '-'}</div>
           </div>
         </div>
 
-        {#if Object.keys(selectedInspection.dimensions).length > 0}
+        {#if parsedDims.length > 0}
           <div class="detail-section">
-            <h3 class="section-title">Measurements</h3>
-            <div class="measurements-grid">
-              {#each Object.entries(selectedInspection.dimensions) as [key, val]}
-                <div class="measurement-item">
-                  <span class="measurement-key">{key}:</span>
-                  <span class="measurement-val">{val} mm</span>
+            <h3 class="section-title">Hasil Pengukuran</h3>
+            <div class="expanded-measurements-table">
+              <div class="table-header">
+                <span class="col-name">Dimensi</span>
+                <span class="col-val">Hasil Pengukuran</span>
+                <span class="col-val">Ukuran Referensi</span>
+                <span class="col-val">Deviasi (Selisih)</span>
+              </div>
+              {#each parsedDims as dim}
+                {@const parsedDev = parseFloat(dim.deviation)}
+                {@const isNg = !isNaN(parsedDev) && Math.abs(parsedDev) > 0.1}
+                <div class="table-row" class:deviation-alert={isNg}>
+                  <span class="col-name">{dim.name}</span>
+                  <span class="col-val">{dim.actual}{dim.unit}</span>
+                  <span class="col-val">{dim.reference}{dim.unit}</span>
+                  <span class="col-val deviation-cell" class:positive={parsedDev > 0} class:negative={parsedDev < 0}>
+                    {dim.deviation !== '-' && parsedDev >= 0 ? '+' : ''}{dim.deviation}{dim.unit}
+                  </span>
                 </div>
               {/each}
             </div>
@@ -337,12 +589,12 @@
 
         {#if selectedInspection.imagePath}
           <div class="detail-section">
-            <h3 class="section-title">Evidence Photo</h3>
+            <h3 class="section-title">Foto Evidence</h3>
             <img src={selectedInspection.imagePath} alt="Evidence" class="evidence-img" onerror={(e) => e.target.style.display='none'} />
           </div>
         {:else}
           <div class="detail-section">
-            <h3 class="section-title">Evidence Photo</h3>
+            <h3 class="section-title">Foto Evidence</h3>
             <div class="no-evidence">
               <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.3;"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
               <p>Tidak ada foto evidence</p>
@@ -440,28 +692,12 @@
   .evidence-icon-wrapper :global(.text-emerald-500) {
     color: #10b981;
   }
-  .btn-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border: 1px solid var(--clr-border);
-    border-radius: var(--radius-md);
-    background: var(--clr-surface);
+  tr.clickable {
     cursor: pointer;
-    transition: all var(--transition-fast);
   }
-  .btn-view {
-    color: var(--clr-accent);
+  tr.clickable:hover {
+    background: var(--clr-surface-2);
   }
-  .btn-view:hover {
-    background: var(--clr-accent);
-    color: white;
-    border-color: var(--clr-accent);
-  }
-  .btn-icon:active { transform: scale(0.95); }
   .dim { color: var(--clr-text-dim); font-size: var(--fs-xs); }
   .error-banner { padding: var(--sp-3); background: var(--clr-ng-bg); color: var(--clr-ng); border-radius: var(--radius-md); font-size: var(--fs-sm); margin-bottom: var(--sp-4); border: 1px solid var(--clr-ng-border); }
   .loading-state { padding: var(--sp-8); text-align: center; color: var(--clr-text-muted); }
@@ -483,13 +719,199 @@
   .section-title { font-size: var(--fs-md); font-weight: var(--fw-semibold); margin-bottom: var(--sp-3); color: var(--clr-text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
   .detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-3); font-size: var(--fs-sm); }
   .detail-grid .label { color: var(--clr-text-muted); font-weight: var(--fw-medium); }
-  .measurements-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-2); }
-  .measurement-item { background: var(--clr-surface-2); padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-md); }
-  .measurement-key { font-size: var(--fs-xs); color: var(--clr-text-muted); font-weight: var(--fw-medium); }
-  .measurement-val { font-size: var(--fs-sm); font-weight: var(--fw-semibold); display: block; margin-top: var(--sp-1); }
+  .expanded-measurements-table {
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--clr-surface-2);
+  }
+  .expanded-measurements-table .table-header {
+    display: grid;
+    grid-template-columns: 2fr repeat(3, 1fr);
+    background: var(--clr-surface-3);
+    border-bottom: 1px solid var(--clr-border);
+    padding: var(--sp-2) var(--sp-4);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    color: var(--clr-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .expanded-measurements-table .table-row {
+    display: grid;
+    grid-template-columns: 2fr repeat(3, 1fr);
+    padding: var(--sp-3) var(--sp-4);
+    font-size: var(--fs-sm);
+    border-bottom: 1px solid var(--clr-border);
+    align-items: center;
+  }
+  .expanded-measurements-table .table-row:last-child {
+    border-bottom: none;
+  }
+  .expanded-measurements-table .table-row.deviation-alert {
+    background: var(--clr-ng-bg);
+  }
+  .col-name {
+    font-weight: var(--fw-semibold);
+    color: var(--clr-text);
+  }
+  .col-val {
+    color: var(--clr-text-muted);
+  }
+  .deviation-cell {
+    font-weight: var(--fw-semibold);
+  }
+  .deviation-cell.positive {
+    color: var(--clr-ok);
+  }
+  .deviation-cell.negative {
+    color: #3b82f6;
+  }
+  .no-measurements-msg {
+    font-size: var(--fs-sm);
+    color: var(--clr-text-dim);
+    text-align: center;
+    padding: var(--sp-4);
+  }
   .evidence-img { width: 100%; max-width: 500px; border-radius: var(--radius-lg); border: 1px solid var(--clr-border); }
   .no-evidence { text-align: center; padding: var(--sp-8); color: var(--clr-text-dim); background: var(--clr-surface-2); border-radius: var(--radius-lg); }
   .no-evidence p { margin-top: var(--sp-2); font-size: var(--fs-sm); }
   .page { display: flex; flex-direction: column; flex: 1; overflow: hidden; height: 100%; }
-  .table-container { flex: 1; overflow-y: auto; }
+  .table-container { flex: 1; overflow-y: auto; overflow-x: auto; }
+
+  @media (max-width: 768px) {
+    .modal {
+      padding: var(--sp-4);
+    }
+    .detail-grid {
+      grid-template-columns: 1fr;
+    }
+    .expanded-measurements-table .table-header,
+    .expanded-measurements-table .table-row {
+      grid-template-columns: 1.5fr repeat(3, 1fr);
+      padding: var(--sp-2) var(--sp-2);
+      font-size: var(--fs-xs);
+    }
+    .filter-row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--sp-2);
+    }
+    .filter-input,
+    .filter-select,
+    .quick-filters,
+    .date-filter-group {
+      max-width: 100% !important;
+      width: 100% !important;
+      flex: 1 1 100%;
+    }
+    .quick-btn {
+      flex: 1;
+      text-align: center;
+    }
+  }
+
+  /* View Toggle & Session Grouping Styles */
+  .view-toggle {
+    display: inline-flex;
+    background: var(--clr-surface-2);
+    border: 1px solid var(--clr-border);
+    border-radius: 30px;
+    padding: 3px;
+    gap: 4px;
+    align-items: center;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+  .toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px var(--sp-4);
+    font-family: var(--font-family);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    color: var(--clr-text-muted);
+    background: transparent;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    white-space: nowrap;
+  }
+  .toggle-btn.active {
+    background: var(--clr-surface);
+    color: var(--clr-accent);
+    box-shadow: 0 2px 5px rgba(0, 51, 153, 0.1), 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+  .toggle-btn:hover:not(.active) {
+    color: var(--clr-text);
+    background: rgba(0, 0, 0, 0.02);
+  }
+  .toggle-icon {
+    opacity: 0.6;
+    transition: all var(--transition-fast);
+  }
+  .toggle-btn.active .toggle-icon {
+    opacity: 1;
+    color: var(--clr-accent);
+  }
+  .expand-icon { color: var(--clr-text-dim); font-size: var(--fs-xs); width: 24px; }
+  .detail-row td { padding: var(--sp-4) !important; background: var(--clr-surface-2); }
+  .session-detail-container {
+    padding: var(--sp-4) var(--sp-5);
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-lg);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.01);
+    margin: var(--sp-2) 0;
+  }
+  .session-subtitle {
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-bold);
+    color: var(--clr-text);
+    margin-bottom: var(--sp-3);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+  .session-subtitle::before {
+    content: "";
+    display: inline-block;
+    width: 4px;
+    height: 14px;
+    background: var(--clr-accent);
+    border-radius: var(--radius-sm);
+  }
+  .session-table-wrapper {
+    overflow-x: auto;
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    background: var(--clr-surface-2);
+  }
+  .session-inspections-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs-sm);
+  }
+  .session-inspections-table th {
+    background: var(--clr-surface-3);
+    color: var(--clr-text-muted);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    padding: 10px var(--sp-4);
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--clr-border);
+  }
+  .session-inspections-table td {
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--clr-border);
+    color: var(--clr-text);
+  }
+  .session-inspections-table tr:last-child td {
+    border-bottom: none;
+  }
 </style>
