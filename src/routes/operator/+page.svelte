@@ -45,6 +45,10 @@
   let selectedCamera = $state('');
   let useIpCamera = $state(false);
   let ipCameraUrl = $state('http://192.168.1.100:8080/video');
+  
+  // Detail modal state
+  let selectedInspection = $state(null);
+  let showDetailModal = $state(false);
 
   // Derived state untuk status CV online/offline
   let cvOnline = $derived(cvLastSeen && (Date.now() - cvLastSeen) < 60_000);
@@ -121,7 +125,20 @@
       status: item.status === 'GOOD' ? 'OK' : item.status === 'NO GOOD' ? 'NG' : item.status,
       time: new Date(item.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
       dimensions: dims,
+      timestamp: item.timestamp,
+      shape: item.shape,
+      matchedRef: item.matchedRef,
     };
+  }
+  
+  function openDetailModal(inspection) {
+    selectedInspection = inspection;
+    showDetailModal = true;
+  }
+  
+  function closeDetailModal() {
+    showDetailModal = false;
+    setTimeout(() => selectedInspection = null, 300);
   }
 
   async function handleStartSession() {
@@ -412,6 +429,124 @@
 <svelte:head>
   <title>{$t('operator.live_camera')} - EPSON QC</title>
 </svelte:head>
+
+<!-- Detail Modal -->
+{#if showDetailModal && selectedInspection}
+  <div class="modal-overlay" onclick={closeDetailModal}>
+    <div class="modal-card" onclick={(e) => e.stopPropagation()}>
+      <div class="modal-header">
+        <div>
+          <h3>Detail Inspeksi #{selectedInspection.id}</h3>
+          <p class="modal-subtitle">{selectedInspection.partName} ({selectedInspection.part})</p>
+        </div>
+        <button class="modal-close" onclick={closeDetailModal}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      
+      <div class="modal-body">
+        <div class="detail-status" class:ok={selectedInspection.status === 'OK'} class:ng={selectedInspection.status === 'NG'}>
+          {#if selectedInspection.status === 'OK'}
+            <CheckCircle size={32} />
+          {:else}
+            <XCircle size={32} />
+          {/if}
+          <span>{selectedInspection.status}</span>
+        </div>
+        
+        <div class="detail-meta">
+          <div class="meta-item">
+            <span class="meta-label">Waktu:</span>
+            <span class="meta-value">{new Date(selectedInspection.timestamp).toLocaleString('id-ID')}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Shape:</span>
+            <span class="meta-value">{selectedInspection.shape || '-'}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Reference:</span>
+            <span class="meta-value">{selectedInspection.matchedRef || '-'}</span>
+          </div>
+        </div>
+
+        <div class="measurements-table">
+          <div class="table-header">
+            <span class="col-dimension">Dimensi</span>
+            <span class="col-actual">Aktual (mm)</span>
+            <span class="col-reference">Reference (mm)</span>
+            <span class="col-deviation">Deviasi (mm)</span>
+          </div>
+          
+          {#if selectedInspection.dimensions.diameter_mm !== undefined}
+            <div class="table-row" class:deviation-alert={Math.abs(selectedInspection.dimensions.deviation_diameter_mm || 0) > 0.5}>
+              <span class="col-dimension">Diameter</span>
+              <span class="col-actual">{selectedInspection.dimensions.diameter_mm?.toFixed(2) || '-'}</span>
+              <span class="col-reference">{selectedInspection.dimensions.reference_diameter_mm?.toFixed(2) || '-'}</span>
+              <span class="col-deviation" class:positive={(selectedInspection.dimensions.deviation_diameter_mm || 0) > 0}>
+                {selectedInspection.dimensions.deviation_diameter_mm !== undefined 
+                  ? (selectedInspection.dimensions.deviation_diameter_mm >= 0 ? '+' : '') + selectedInspection.dimensions.deviation_diameter_mm.toFixed(2)
+                  : '-'}
+              </span>
+            </div>
+          {/if}
+          
+          {#if selectedInspection.dimensions.width_mm !== undefined}
+            <div class="table-row" class:deviation-alert={Math.abs(selectedInspection.dimensions.deviation_width_mm || 0) > 0.5}>
+              <span class="col-dimension">Width</span>
+              <span class="col-actual">{selectedInspection.dimensions.width_mm?.toFixed(2) || '-'}</span>
+              <span class="col-reference">{selectedInspection.dimensions.reference_width_mm?.toFixed(2) || '-'}</span>
+              <span class="col-deviation" class:positive={(selectedInspection.dimensions.deviation_width_mm || 0) > 0}>
+                {selectedInspection.dimensions.deviation_width_mm !== undefined 
+                  ? (selectedInspection.dimensions.deviation_width_mm >= 0 ? '+' : '') + selectedInspection.dimensions.deviation_width_mm.toFixed(2)
+                  : '-'}
+              </span>
+            </div>
+          {/if}
+          
+          {#if selectedInspection.dimensions.height_mm !== undefined}
+            <div class="table-row" class:deviation-alert={Math.abs(selectedInspection.dimensions.deviation_height_mm || 0) > 0.5}>
+              <span class="col-dimension">Height</span>
+              <span class="col-actual">{selectedInspection.dimensions.height_mm?.toFixed(2) || '-'}</span>
+              <span class="col-reference">{selectedInspection.dimensions.reference_height_mm?.toFixed(2) || '-'}</span>
+              <span class="col-deviation" class:positive={(selectedInspection.dimensions.deviation_height_mm || 0) > 0}>
+                {selectedInspection.dimensions.deviation_height_mm !== undefined 
+                  ? (selectedInspection.dimensions.deviation_height_mm >= 0 ? '+' : '') + selectedInspection.dimensions.deviation_height_mm.toFixed(2)
+                  : '-'}
+              </span>
+            </div>
+          {/if}
+          
+          {#if selectedInspection.dimensions.area_mm2 !== undefined}
+            <div class="table-row">
+              <span class="col-dimension">Area</span>
+              <span class="col-actual">{selectedInspection.dimensions.area_mm2?.toFixed(2) || '-'}</span>
+              <span class="col-reference">-</span>
+              <span class="col-deviation">-</span>
+            </div>
+          {/if}
+          
+          {#if selectedInspection.dimensions.perimeter_mm !== undefined}
+            <div class="table-row">
+              <span class="col-dimension">Perimeter</span>
+              <span class="col-actual">{selectedInspection.dimensions.perimeter_mm?.toFixed(2) || '-'}</span>
+              <span class="col-reference">-</span>
+              <span class="col-deviation">-</span>
+            </div>
+          {/if}
+        </div>
+        
+        {#if selectedInspection.dimensions.within_tolerance !== undefined}
+          <div class="tolerance-badge" class:within={selectedInspection.dimensions.within_tolerance}>
+            {selectedInspection.dimensions.within_tolerance ? '✓ Dalam Toleransi' : '⚠ Di Luar Toleransi'}
+          </div>
+        {/if}
+      </div>
+    </div>
+  </div>
+{/if}
 
 <!-- NG Full-screen overlay -->
 {#if showNgOverlay}
@@ -886,14 +1021,14 @@
           <div class="section-label">{$t('operator.session_history')} ({recentInspections.length})</div>
           <div class="history-list">
             {#each recentInspections as item (item.id)}
-              <div class="history-row">
+              <button class="history-row" onclick={() => openDetailModal(item)}>
                 <span class="history-id">#{item.id}</span>
                 <span class="history-part">{item.part}</span>
                 <span class="badge" class:badge-ok={item.status === 'OK'} class:badge-ng={item.status === 'NG'}>
                   {item.status}
                 </span>
                 <span class="history-time">{item.time}</span>
-              </div>
+              </button>
             {/each}
             {#if recentInspections.length === 0}
               <p class="no-data-text">{$t('common.no_data')}</p>
@@ -1301,6 +1436,15 @@
     border: 1px solid var(--clr-border);
     border-radius: var(--radius-sm);
     font-size: var(--fs-sm);
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+    text-align: left;
+  }
+  .history-row:hover {
+    background: var(--clr-surface-2);
+    border-color: var(--clr-accent);
+    transform: translateX(4px);
   }
   .history-id {
     font-weight: var(--fw-semibold);
@@ -1523,6 +1667,239 @@
     font-size: 14px;
     border: 1px solid var(--clr-border);
     border-radius: var(--radius-md);
+  }
+
+  /* Detail Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.2s ease;
+    padding: var(--sp-4);
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  .modal-card {
+    background: var(--clr-bg);
+    border: 2px solid var(--clr-border);
+    border-radius: var(--radius-lg);
+    max-width: 700px;
+    width: 100%;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: slideUp 0.3s ease;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  }
+  
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  
+  .modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: var(--sp-5);
+    border-bottom: 2px solid var(--clr-border);
+    background: var(--clr-surface);
+  }
+  
+  .modal-header h3 {
+    font-family: var(--font-heading);
+    font-size: var(--fs-xl);
+    font-weight: var(--fw-bold);
+    margin: 0;
+    color: var(--clr-text);
+  }
+  
+  .modal-subtitle {
+    font-size: var(--fs-sm);
+    color: var(--clr-text-muted);
+    margin: var(--sp-1) 0 0 0;
+  }
+  
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--clr-text-muted);
+    cursor: pointer;
+    padding: var(--sp-1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    transition: all 0.2s;
+  }
+  
+  .modal-close:hover {
+    background: var(--clr-surface-2);
+    color: var(--clr-text);
+  }
+  
+  .modal-body {
+    padding: var(--sp-5);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+  }
+  
+  .detail-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+    border-radius: var(--radius-md);
+    font-family: var(--font-heading);
+    font-size: var(--fs-2xl);
+    font-weight: var(--fw-bold);
+    letter-spacing: 2px;
+  }
+  
+  .detail-status.ok {
+    background: var(--clr-ok-bg);
+    color: var(--clr-ok);
+    border: 2px solid var(--clr-ok-border);
+  }
+  
+  .detail-status.ng {
+    background: var(--clr-ng-bg);
+    color: var(--clr-ng);
+    border: 2px solid var(--clr-ng-border);
+  }
+  
+  .detail-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+  }
+  
+  .meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+  }
+  
+  .meta-label {
+    font-size: var(--fs-xs);
+    color: var(--clr-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  .meta-value {
+    font-size: var(--fs-base);
+    font-weight: var(--fw-semibold);
+    color: var(--clr-text);
+  }
+  
+  .measurements-table {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  
+  .table-header,
+  .table-row {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1fr 1fr;
+    gap: var(--sp-2);
+    padding: var(--sp-3);
+    align-items: center;
+  }
+  
+  .table-header {
+    background: var(--clr-surface);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-bold);
+    color: var(--clr-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--clr-border);
+  }
+  
+  .table-row {
+    background: var(--clr-bg);
+    font-size: var(--fs-sm);
+    border-bottom: 1px solid var(--clr-border-light);
+    transition: background 0.2s;
+  }
+  
+  .table-row:last-child {
+    border-bottom: none;
+  }
+  
+  .table-row:hover {
+    background: var(--clr-surface);
+  }
+  
+  .table-row.deviation-alert {
+    background: rgba(239, 68, 68, 0.05);
+  }
+  
+  .col-dimension {
+    font-weight: var(--fw-semibold);
+  }
+  
+  .col-actual {
+    font-family: var(--font-heading);
+    font-weight: var(--fw-bold);
+    color: var(--clr-accent);
+    font-variant-numeric: tabular-nums;
+  }
+  
+  .col-reference {
+    font-family: var(--font-heading);
+    font-variant-numeric: tabular-nums;
+  }
+  
+  .col-deviation {
+    font-family: var(--font-heading);
+    font-weight: var(--fw-bold);
+    font-variant-numeric: tabular-nums;
+    color: var(--clr-text-muted);
+  }
+  
+  .col-deviation.positive {
+    color: var(--clr-ng);
+  }
+  
+  .tolerance-badge {
+    padding: var(--sp-3) var(--sp-4);
+    border-radius: var(--radius-md);
+    text-align: center;
+    font-weight: var(--fw-semibold);
+    font-size: var(--fs-sm);
+  }
+  
+  .tolerance-badge.within {
+    background: var(--clr-ok-bg);
+    color: var(--clr-ok);
+    border: 1px solid var(--clr-ok-border);
+  }
+  
+  .tolerance-badge:not(.within) {
+    background: var(--clr-ng-bg);
+    color: var(--clr-ng);
+    border: 1px solid var(--clr-ng-border);
   }
 </style>
 
