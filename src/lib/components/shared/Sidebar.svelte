@@ -11,7 +11,8 @@
     Bell, 
     Link, 
     Shield, 
-    Settings 
+    Settings,
+    Database
   } from '@lucide/svelte';
 
   let { items = [], role = 'operator' } = $props();
@@ -24,7 +25,8 @@
     alerts: Bell,
     traceability: Link,
     integrity: Shield,
-    calibration: Settings
+    calibration: Settings,
+    database: Database
   };
 
   async function handleLogout() {

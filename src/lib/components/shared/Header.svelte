@@ -1,10 +1,11 @@
 <script>
   import { t } from "$lib/i18n.js";
   import { auth, currentUser } from "$lib/stores/auth.js";
+  import { Menu } from "@lucide/svelte";
 
   import { goto } from "$app/navigation";
 
-  let { role = "operator", title = "" } = $props();
+  let { role = "operator", title = "", navigation, onMenuClick } = $props();
 
   let showUserMenu = $state(false);
 
@@ -18,6 +19,11 @@
 
 <header class="header">
   <div class="header-left">
+    {#if onMenuClick}
+      <button class="menu-toggle-btn" onclick={onMenuClick} aria-label="Toggle navigation menu">
+        <Menu size={20} />
+      </button>
+    {/if}
     <div class="header-brand">
       <div class="brand-mark">
         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -30,6 +36,12 @@
     {#if title}
       <span class="header-divider"></span>
       <span class="header-title">{title}</span>
+    {/if}
+    {#if navigation}
+      <span class="header-divider"></span>
+      <div class="header-nav-wrapper">
+        {@render navigation()}
+      </div>
     {/if}
   </div>
 
@@ -95,6 +107,24 @@
     align-items: center;
     gap: var(--sp-4);
   }
+  .menu-toggle-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: transparent;
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    color: var(--clr-text-muted);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  .menu-toggle-btn:hover {
+    background: var(--clr-surface-2);
+    color: var(--clr-text);
+    border-color: var(--clr-border-light);
+  }
   .header-brand {
     display: flex;
     align-items: center;
@@ -126,6 +156,10 @@
     font-size: var(--fs-sm);
     color: var(--clr-text-muted);
     font-weight: var(--fw-medium);
+  }
+  .header-nav-wrapper {
+    display: flex;
+    align-items: center;
   }
   .header-right {
     display: flex;
@@ -228,5 +262,31 @@
     z-index: 99;
     border: none;
     cursor: default;
+  }
+  @media (max-width: 768px) {
+    .menu-toggle-btn {
+      display: flex;
+    }
+    .header-left {
+      gap: var(--sp-2);
+    }
+    .header-nav-wrapper {
+      display: none !important;
+    }
+    .header-divider {
+      display: none !important;
+    }
+    .header-title {
+      display: none !important;
+    }
+    .user-name {
+      display: none !important;
+    }
+    .user-btn {
+      padding: 4px !important;
+    }
+    .user-chevron {
+      display: none !important;
+    }
   }
 </style>
