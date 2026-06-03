@@ -468,7 +468,7 @@
             }}
             disabled={saving}
           >
-            <Database size={14} class="mr-2" /> Capture from Live Stream
+            <Database size={14} class="mr-2" /> Capture dari CV Program
           </button>
         </div>
 
@@ -496,27 +496,11 @@
             </div>
           </div>
         {:else}
-          <div class="stream-preview">
-            <div class="stream-container">
-              <img
-                src="http://localhost:5000/video_feed"
-                alt="CV Stream"
-                class="stream-video"
-                onerror={(e) => {
-                  e.target.style.display = "none";
-                  e.target.nextElementSibling.style.display = "flex";
-                }}
-                onload={(e) => {
-                  e.target.style.display = "block";
-                  e.target.nextElementSibling.style.display = "none";
-                }}
-              />
-              <div class="stream-fallback" style="display: flex;">
-                <p>CV Stream not available</p>
-              </div>
-            </div>
+          <div class="capture-info-box">
+            <Database size={32} class="info-icon" />
+            <p class="info-text">Akan mengambil frame saat ini dari CV program yang sedang berjalan</p>
             <p class="hint text-center">
-              Position ONE object in the frame, then click Save
+              Pastikan Main-ProgramV7.py sudah running dan object sudah diposisikan
             </p>
           </div>
         {/if}
@@ -1029,6 +1013,31 @@
     font-weight: var(--fw-medium);
     margin-bottom: 2px;
     word-break: break-all;
+  }
+
+  /* CAPTURE INFO BOX */
+  .capture-info-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--sp-6) var(--sp-4);
+    background: var(--clr-surface-2);
+    border: 1px dashed var(--clr-border);
+    border-radius: var(--radius-md);
+    text-align: center;
+    gap: var(--sp-3);
+  }
+  
+  .info-icon {
+    color: var(--clr-accent);
+    opacity: 0.7;
+  }
+  
+  .info-text {
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    color: var(--clr-text);
+    margin: 0;
   }
 
   /* LIVE VIDEO CONTAINER COMPACT */
