@@ -21,7 +21,11 @@
   let useStream = $state(false);  // Toggle between upload image or capture from stream
 
   async function loadReferences() {
-    if (!$isAuthenticated) return;
+    // Wait for auth to be ready
+    if (!$isAuthenticated) {
+      console.log('Waiting for authentication...');
+      return;
+    }
     
     loading = true;
     error = '';
@@ -44,7 +48,9 @@
     }
   }
 
-  onMount(() => {
+  onMount(async () => {
+    // Wait a bit for auth restore from layout
+    await new Promise(resolve => setTimeout(resolve, 100));
     loadReferences();
     loadCvConfig();
 
