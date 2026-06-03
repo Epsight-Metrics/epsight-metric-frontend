@@ -5,6 +5,7 @@
   import { getSession, startSession, stopSession, submitInspection, getParts } from '$lib/api/operator.js';
   import { connectSSE } from '$lib/api/notifications.js';
   import { getToken } from '$lib/api/client.js';
+  import { getReferences } from '$lib/api/reference.js';
 
   // Session state
   let activeSession = $state(null);
@@ -23,6 +24,8 @@
   let referenceMatched = $state('');
   let selectedPartId = $state(null);
   let parts = $state([]);
+  let references = $state([]);
+  let selectedRefName = $state('');
   let recentInspections = $state([]);
   let todayInspected = $state(0);
   let todayNg = $state(0);
@@ -88,12 +91,15 @@
     pageLoading = true;
     error = '';
     try {
-      const [sessionData, partsData] = await Promise.all([
+      const [sessionData, partsData, refsData] = await Promise.all([
         getSession(),
         getParts(),
+        getReferences(),
       ]);
 
       parts = partsData || [];
+      references = refsData?.references || [];
+      if (references.length > 0) selectedRefName = references[0].name;
       if (parts.length > 0 && !selectedPartId) {
         selectedPartId = parts[0].id;
       }
@@ -371,9 +377,7 @@
       formData.append('partId', selectedPartId);
       formData.append('sessionId', activeSession.sessionId);
 
-      const part = parts.find((p) => p.id == selectedPartId);
-      const refName = part ? part.partCode : '';
-      formData.append('referenceName', refName);  
+      formData.append('referenceName', selectedRefName);
 
       const API_BASE = import.meta.env.VITE_API_URL 
         ? `${import.meta.env.VITE_API_URL}/api` 
@@ -690,6 +694,18 @@
           {#each parts as part}
             <option value={part.id}>{part.partCode} — {part.partName}</option>
           {/each}
+        </select>
+      </div>
+      <div class="part-selector">
+        <label class="label" for="refSelect">Referensi</label>
+        <select id="refSelect" class="select" bind:value={selectedRefName}>
+          {#if references.length === 0}
+            <option value="">— Belum ada referensi —</option>
+          {:else}
+            {#each references as ref}
+              <option value={ref.name}>{ref.name} ({ref.shape})</option>
+            {/each}
+          {/if}
         </select>
       </div>
     </div>
@@ -1812,13 +1828,25 @@
     border-color: var(--clr-accent);
   }
 
-  /* Online Header Row — radio + dropdown side-by-side */
+  /* Online Header Row — stacked layout */
   .online-header-row {
     display: flex;
-    gap: 12px;
-    align-items: center;
+    flex-direction: column;
+    gap: 10px;
     margin-bottom: var(--sp-3);
   }
+  .ref-selector {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+  }
+
+  .ref-selector .select {
+    width: 100%;
+    min-height: 44px;
+    font-size: var(--fs-sm);
+  }
+
   .online-mode-options {
     display: flex;
     gap: 16px;
