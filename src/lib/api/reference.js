@@ -42,17 +42,17 @@ export async function saveReferenceFromImage(imageFile, name, cvConfig) {
 }
 
 export async function saveReferenceFromStream(name, cvConfig) {
+  const formData = new FormData();
+  formData.append('name', name);
+  formData.append('ppm', cvConfig.pixel_per_mm ?? cvConfig.pixelPerMm);
+  formData.append('tolerance_mm', cvConfig.tolerance_mm ?? cvConfig.toleranceMm);
+  formData.append('contour_thresh', cvConfig.contour_thresh ?? cvConfig.contourThresh);
+  formData.append('min_area', cvConfig.contour_min_area ?? cvConfig.contourMinArea);
+  formData.append('min_feature_mm', cvConfig.min_feature_mm ?? cvConfig.minFeatureMm);
+
   const res = await fetch(`${CV_API_URL}/save-reference-from-stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name,
-      ppm: cvConfig.pixel_per_mm ?? cvConfig.pixelPerMm,
-      tolerance_mm: cvConfig.tolerance_mm ?? cvConfig.toleranceMm,
-      contour_thresh: cvConfig.contour_thresh ?? cvConfig.contourThresh,
-      min_area: cvConfig.contour_min_area ?? cvConfig.contourMinArea,
-      min_feature_mm: cvConfig.min_feature_mm ?? cvConfig.minFeatureMm
-    })
+    body: formData
   });
   
   if (!res.ok) throw new Error('Failed to capture from stream');
