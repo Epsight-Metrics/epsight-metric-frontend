@@ -769,7 +769,7 @@
   .evidence-img { width: 100%; max-width: 500px; border-radius: var(--radius-lg); border: 1px solid var(--clr-border); }
   .no-evidence { text-align: center; padding: var(--sp-8); color: var(--clr-text-dim); background: var(--clr-surface-2); border-radius: var(--radius-lg); }
   .no-evidence p { margin-top: var(--sp-2); font-size: var(--fs-sm); }
-  .page { display: flex; flex-direction: column; flex: 1; overflow: hidden; height: 100%; }
+  .page { display: flex; flex-direction: column; flex: 1; height: 100%; }
   .table-container { flex: 1; overflow-y: auto; overflow-x: auto; }
 
   @media (max-width: 768px) {
