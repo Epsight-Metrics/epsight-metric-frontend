@@ -294,7 +294,7 @@
 </div>
 
 <style>
-  .page { display: flex; flex-direction: column; flex: 1; overflow: hidden; height: 100%; }
+  .page { display: flex; flex-direction: column; flex: 1; height: 100%; }
   .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-5); flex-wrap: wrap; gap: var(--sp-3); }
   .page-title { font-size: var(--fs-xl); font-weight: var(--fw-semibold); }
   .filter-row { display: flex; gap: var(--sp-3); margin-bottom: var(--sp-4); flex-wrap: wrap; align-items: center; }

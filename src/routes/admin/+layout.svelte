@@ -27,19 +27,18 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
   }
   .admin-body {
     flex: 1;
     display: flex;
-    overflow: hidden;
+    overflow-y: auto;
   }
   .admin-main {
     flex: 1;
     padding: var(--sp-6);
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow-y: auto;
   }
 
   @media (max-width: 768px) {

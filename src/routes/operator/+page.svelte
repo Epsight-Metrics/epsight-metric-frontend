@@ -1288,7 +1288,6 @@
     border: 2px solid var(--clr-border);
     border-radius: var(--radius-lg);
     position: relative;
-    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;

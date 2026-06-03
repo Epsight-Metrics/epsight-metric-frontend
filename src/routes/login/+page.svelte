@@ -210,7 +210,6 @@
     align-items: center;
     justify-content: center;
     position: relative;
-    overflow: hidden;
     padding: var(--sp-4);
     background: var(--clr-bg);
   }
