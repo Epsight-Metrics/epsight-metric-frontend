@@ -67,9 +67,7 @@
     }
   }
 
-  onMount(async () => {
-    // Wait a bit for auth restore from layout
-    await new Promise(resolve => setTimeout(resolve, 100));
+  onMount(() => {
     loadReferences();
     loadCvConfig();
 
@@ -418,7 +416,12 @@
   <div
     class="modal-overlay animate-fade-in"
     onclick={() => (showAddForm = false)}
+    onkeydown={(e) => e.key === 'Escape' && (showAddForm = false)}
+    role="button"
+    tabindex="0"
   >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="modal-card animate-scale-in"
       onclick={(e) => e.stopPropagation()}
@@ -839,31 +842,6 @@
     margin-bottom: var(--sp-4);
   }
 
-  .empty-icon {
-    color: var(--clr-border);
-    margin-bottom: var(--sp-3);
-  }
-
-  .inline-icon {
-    display: inline-block;
-    vertical-align: middle;
-    margin-top: -2px;
-  }
-  .mr-2 {
-    margin-right: 8px;
-  }
-  .mr-1 {
-    margin-right: 4px;
-  }
-  .text-primary {
-    color: var(--clr-accent);
-  }
-  .text-purple {
-    color: #a855f7;
-  }
-  .text-dim {
-    color: var(--clr-text-dim);
-  }
 
   /* ========================================= */
   /* MODAL OVERLAY OVERRIDE FOR DESKTOP VIEW   */
@@ -1009,10 +987,6 @@
     background: var(--clr-surface);
   }
 
-  .upload-icon {
-    color: var(--clr-accent);
-    margin: 0 auto var(--sp-3);
-  }
 
   .filename-text {
     font-size: var(--fs-sm);
@@ -1034,50 +1008,11 @@
     gap: var(--sp-3);
   }
   
-  .info-icon {
-    color: var(--clr-accent);
-    opacity: 0.7;
-  }
-  
   .info-text {
     font-size: var(--fs-sm);
     font-weight: var(--fw-medium);
     color: var(--clr-text);
     margin: 0;
-  }
-
-  /* LIVE VIDEO CONTAINER COMPACT */
-  .stream-preview {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-2);
-  }
-
-  .stream-container {
-    position: relative;
-    width: 100%;
-    height: 220px;
-    border: 1px solid var(--clr-border);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-    background: var(--clr-surface-2);
-  }
-
-  .stream-video {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    display: none;
-  }
-
-  .stream-fallback {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--clr-text-dim);
-    font-size: var(--fs-xs);
   }
 
   /* KEYFRAME ANIMATIONS */

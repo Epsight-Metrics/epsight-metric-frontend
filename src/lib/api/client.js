@@ -5,6 +5,7 @@ const API_BASE = import.meta.env.VITE_API_URL
 
 
 let activeToken = null;
+let refreshPromise = null;
 
 export function setToken(token) {
   activeToken = token;
@@ -78,39 +79,46 @@ export async function apiFetch(endpoint, options = {}) {
   if (!response.ok) {
     if (response.status === 401 && endpoint !== '/auth/refresh' && endpoint !== '/auth/login' && endpoint !== '/auth/logout') {
       try {
-        // Attempt to refresh token
-        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
-          },
-          credentials: 'include',
-        });
-        const refreshData = await refreshRes.json().catch(() => null);
-
-        if (refreshRes.ok && refreshData?.accessToken) {
-          setToken(refreshData.accessToken);
-          // Retry original request
-          fetchOptions.headers['Authorization'] = `Bearer ${refreshData.accessToken}`;
-          const retryRes = await fetch(url, fetchOptions);
-
-          if (retryRes.headers.get('content-type')?.includes('application/pdf') || retryRes.headers.get('content-type')?.includes('text/csv')) {
-            if (!retryRes.ok) throw new ApiError('Export gagal', retryRes.status);
-            return retryRes.blob();
-          }
-
-          const retryData = await retryRes.json().catch(() => null);
-          if (retryRes.ok) return retryData;
-
-          throw new ApiError(
-            retryData?.message || `Permintaan gagal (${retryRes.status})`,
-            retryRes.status,
-            retryData?.errors || null
-          );
-        } else {
-          throw new Error('Refresh failed');
+        // Attempt to refresh token with request sharing / deduplication
+        if (!refreshPromise) {
+          refreshPromise = fetch(`${API_BASE}/auth/refresh`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'include',
+          }).then(async (res) => {
+            const data = await res.json().catch(() => null);
+            if (res.ok && data?.accessToken) {
+              setToken(data.accessToken);
+              return data.accessToken;
+            }
+            throw new Error('Refresh failed');
+          }).finally(() => {
+            refreshPromise = null;
+          });
         }
+
+        const newAccessToken = await refreshPromise;
+
+        // Retry original request
+        fetchOptions.headers['Authorization'] = `Bearer ${newAccessToken}`;
+        const retryRes = await fetch(url, fetchOptions);
+
+        if (retryRes.headers.get('content-type')?.includes('application/pdf') || retryRes.headers.get('content-type')?.includes('text/csv')) {
+          if (!retryRes.ok) throw new ApiError('Export gagal', retryRes.status);
+          return retryRes.blob();
+        }
+
+        const retryData = await retryRes.json().catch(() => null);
+        if (retryRes.ok) return retryData;
+
+        throw new ApiError(
+          retryData?.message || `Permintaan gagal (${retryRes.status})`,
+          retryRes.status,
+          retryData?.errors || null
+        );
       } catch (err) {
         // Clear session on refresh failure
         setToken(null);
