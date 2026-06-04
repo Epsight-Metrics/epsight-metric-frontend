@@ -149,18 +149,58 @@
     }
   }
 
+  function flattenDimensions(dims) {
+    if (!dims) return {};
+
+    // Jika sudah flat, kembalikan langsung
+    if (
+      dims.diameter_mm !== undefined ||
+      dims.width_mm !== undefined ||
+      dims.height_mm !== undefined
+    ) {
+      return dims;
+    }
+
+    const flat = {};
+    const measurements = dims.measurements || {};
+    const deviations = dims.deviations || {};
+
+    // Ambil data aktual
+    if (measurements.diameter_mm !== undefined) flat.diameter_mm = measurements.diameter_mm;
+    if (measurements.width_mm !== undefined) flat.width_mm = measurements.width_mm;
+    if (measurements.height_mm !== undefined) flat.height_mm = measurements.height_mm;
+    if (measurements.area_mm2 !== undefined) flat.area_mm2 = measurements.area_mm2;
+    if (measurements.perimeter_mm !== undefined) flat.perimeter_mm = measurements.perimeter_mm;
+
+    // Ambil deviasi
+    if (deviations.diameter_mm !== undefined) flat.deviation_diameter_mm = deviations.diameter_mm;
+    if (deviations.width_mm !== undefined) flat.deviation_width_mm = deviations.width_mm;
+    if (deviations.height_mm !== undefined) flat.deviation_height_mm = deviations.height_mm;
+
+    // Hitung referensi (referensi = aktual - deviasi)
+    if (flat.diameter_mm !== undefined && flat.deviation_diameter_mm !== undefined) {
+      flat.reference_diameter_mm = flat.diameter_mm - flat.deviation_diameter_mm;
+    }
+    if (flat.width_mm !== undefined && flat.deviation_width_mm !== undefined) {
+      flat.reference_width_mm = flat.width_mm - flat.deviation_width_mm;
+    }
+    if (flat.height_mm !== undefined && flat.deviation_height_mm !== undefined) {
+      flat.reference_height_mm = flat.height_mm - flat.deviation_height_mm;
+    }
+
+    return flat;
+  }
+
   function mapInspection(item) {
-    const dims = item.nilaiDimensi || {};
+    const dims = flattenDimensions(item.nilaiDimensi || {});
+    const isNoRef = !item.matchedRef || item.matchedRef === "-" || item.matchedRef === "No matched reference";
+    const mappedStatus = item.status === "GOOD" ? "OK" : item.status === "NO GOOD" ? "NG" : item.status;
+    const status = isNoRef ? "NO REF" : mappedStatus;
     return {
       id: item.id,
       part: item.part?.partCode || item.idPart || "-",
       partName: item.part?.partName || "-",
-      status:
-        item.status === "GOOD"
-          ? "OK"
-          : item.status === "NO GOOD"
-            ? "NG"
-            : item.status,
+      status: status,
       time: new Date(item.timestamp).toLocaleTimeString("id-ID", {
         hour: "2-digit",
         minute: "2-digit",
@@ -219,7 +259,7 @@
       // Update selectedInspection dengan data lengkap
       selectedInspection = {
         ...selectedInspection,
-        dimensions: inspection.nilaiDimensi || {},
+        dimensions: flattenDimensions(inspection.nilaiDimensi || {}),
         matchedRef: inspection.matchedRef || selectedInspection.matchedRef,
         shape: inspection.shape || selectedInspection.shape,
         timestamp: inspection.timestamp || selectedInspection.timestamp,
@@ -232,7 +272,7 @@
         item.id === inspectionId
           ? {
               ...item,
-              dimensions: inspection.nilaiDimensi || item.dimensions,
+              dimensions: flattenDimensions(inspection.nilaiDimensi || item.dimensions),
               matchedRef: inspection.matchedRef || item.matchedRef,
               shape: inspection.shape || item.shape,
             }
@@ -515,16 +555,20 @@
       if (eventType === "inspection-update") {
         cvLastSeen = Date.now(); // Update CV last seen timestamp
 
+        const isNoRef = !data.matchedRef || data.matchedRef === "-" || data.matchedRef === "No matched reference";
+        const mappedStatus = data.status === "OK" || data.status === "GOOD" ? "OK" : "NG";
+        const status = isNoRef ? "NO REF" : mappedStatus;
+
         const mapped = {
           id: data.inspectionId,
           part: data.partCode || data.idPart || "-",
           partName: data.partName || "-",
-          status: data.status === "OK" || data.status === "GOOD" ? "OK" : "NG",
+          status: status,
           time: new Date(data.timestamp).toLocaleTimeString("id-ID", {
             hour: "2-digit",
             minute: "2-digit",
           }),
-          dimensions: data.nilaiDimensi || {},
+          dimensions: flattenDimensions(data.nilaiDimensi || {}),
           operatorName: data.operatorName || "-",
           sessionId: data.sessionId || "-",
           batchId: data.batchId || null,
@@ -549,7 +593,11 @@
         deviations = dims.deviations || {};
         referenceMatched = dims.referenceMatched || data.matchedRef || "";
 
-        resultStatus = mapped.status;
+        if (!data.matchedRef || data.matchedRef === "-" || data.matchedRef === "No matched reference") {
+          resultStatus = "NO REF";
+        } else {
+          resultStatus = mapped.status;
+        }
         hasResult = true;
         inspecting = false;
       }
@@ -618,17 +666,21 @@
             <p>Memuat detail inspeksi...</p>
           </div>
         {:else}
+          {@const statusText = (!selectedInspection.matchedRef || selectedInspection.matchedRef === "-" || selectedInspection.matchedRef === "No matched reference") ? "NO REF" : selectedInspection.status}
           <div
             class="detail-status"
-            class:ok={selectedInspection.status === "OK"}
-            class:ng={selectedInspection.status === "NG"}
+            class:ok={statusText === "OK"}
+            class:ng={statusText === "NG"}
+            class:noref={statusText === "NO REF"}
           >
-            {#if selectedInspection.status === "OK"}
+            {#if statusText === "OK"}
               <CheckCircle size={32} />
+            {:else if statusText === "NO REF"}
+              <AlertTriangle size={32} />
             {:else}
               <XCircle size={32} />
             {/if}
-            <span>{selectedInspection.status}</span>
+            <span>{statusText}</span>
           </div>
 
           <div class="detail-meta">
@@ -1530,10 +1582,13 @@
             class="status-card animate-fade-in"
             class:ok={resultStatus === "OK"}
             class:ng={resultStatus === "NG"}
+            class:noref={resultStatus === "NO REF"}
           >
             <span class="status-icon">
               {#if resultStatus === "OK"}
                 <CheckCircle size={48} />
+              {:else if resultStatus === "NO REF"}
+                <AlertTriangle size={48} />
               {:else}
                 <XCircle size={48} />
               {/if}
@@ -1639,6 +1694,7 @@
                   class="badge"
                   class:badge-ok={item.status === "OK"}
                   class:badge-ng={item.status === "NG"}
+                  class:badge-warning={item.status === "NO REF"}
                 >
                   {item.status}
                 </span>
@@ -2109,6 +2165,11 @@
     border: 2px solid var(--clr-ng-border);
     animation: blink 1s ease infinite;
   }
+  .status-card.noref {
+    background: var(--clr-warning-bg);
+    color: var(--clr-warning);
+    border: 2px solid var(--clr-warning-border);
+  }
   .status-icon {
     font-size: var(--fs-3xl);
   }
@@ -2557,6 +2618,11 @@
     background: var(--clr-ng-bg);
     color: var(--clr-ng);
     border: 2px solid var(--clr-ng-border);
+  }
+  .detail-status.noref {
+    background: var(--clr-warning-bg);
+    color: var(--clr-warning);
+    border: 2px solid var(--clr-warning-border);
   }
 
   .detail-meta {
