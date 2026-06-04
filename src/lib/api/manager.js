@@ -37,3 +37,25 @@ export async function getAlertSummary(params = {}, options = {}) {
 export async function exportData(params = {}) {
   return api.download('/qcmanager/export', params);
 }
+
+/**
+ * Create a new part (QC Manager / Admin).
+ */
+export async function createPart(data) {
+  return api.post('/qcmanager/parts', data);
+}
+
+/**
+ * Update an existing part (QC Manager / Admin).
+ */
+export async function updatePart(id, data) {
+  return api.put(`/qcmanager/parts/${id}`, data);
+}
+
+/**
+ * Delete a part (QC Manager / Admin).
+ */
+export async function deletePart(id) {
+  return api.delete(`/qcmanager/parts/${id}`);
+}
+

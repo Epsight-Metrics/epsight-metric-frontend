@@ -10,6 +10,7 @@
     { href: "/manager", iconName: "dashboard", label: $t("nav.dashboard") },
     { href: "/manager/history", iconName: "history", label: $t("nav.history") },
     { href: "/manager/alerts", iconName: "alerts", label: $t("nav.alerts") },
+    { href: "/manager/parts", iconName: "database", label: "Kelola Part" },
   ]);
 </script>
 

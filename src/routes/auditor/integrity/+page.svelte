@@ -65,7 +65,7 @@
           timestamp: new Date(item.timestamp).toLocaleString('id-ID'),
           hash: item.hash || 'No hash (legacy data)',
           configVersion: item.configVersion || 'v1.0',
-          status: (item.status === 'GOOD' || item.status === 'OK') ? 'OK' : 'NG',
+          status: (!item.matchedRef || item.matchedRef === '-' || item.matchedRef === 'No matched reference') ? 'NO REF' : (item.status === 'GOOD' || item.status === 'OK') ? 'OK' : 'NG',
           integrity,
           operator: item.operator?.name || '-',
           hasHash,
@@ -235,7 +235,7 @@
             <td class="dim">{record.timestamp}</td>
             <td><code class="hash">{record.hash}</code></td>
             <td>{record.configVersion}</td>
-            <td><span class="badge" class:badge-ok={record.status === 'OK'} class:badge-ng={record.status === 'NG'}>{record.status}</span></td>
+            <td><span class="badge" class:badge-ok={record.status === 'OK'} class:badge-ng={record.status === 'NG'} class:badge-warning={record.status === 'NO REF'}>{record.status}</span></td>
             <td>
               <span class="integrity-badge" class:valid={record.integrity === 'valid'} class:warn={record.integrity === 'warning'}>
                 {#if record.hasHash}

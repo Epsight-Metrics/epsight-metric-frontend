@@ -932,27 +932,30 @@
           </button>
         {/if}
       </div>
-      <div class="part-selector">
-        <label class="label" for="partSelect"
-          >{$t("operator.select_part")}</label
-        >
-        <select id="partSelect" class="select" bind:value={selectedPartId}>
-          {#each parts as part}
-            <option value={part.id}>{part.partCode} — {part.partName}</option>
-          {/each}
-        </select>
-      </div>
-      <div class="part-selector">
-        <label class="label" for="refSelect">Referensi</label>
-        <select id="refSelect" class="select" bind:value={selectedRefName}>
-          {#if references.length === 0}
-            <option value="">— Belum ada referensi —</option>
-          {:else}
-            {#each references as ref}
-              <option value={ref.name}>{ref.name} ({ref.shape})</option>
+
+      <div class="session-controls-group">
+        <div class="part-selector">
+          <label class="label" for="partSelect"
+            >{$t("operator.select_part")}</label
+          >
+          <select id="partSelect" class="select-custom" bind:value={selectedPartId}>
+            {#each parts as part}
+              <option value={part.id}>{part.partCode} — {part.partName}</option>
             {/each}
-          {/if}
-        </select>
+          </select>
+        </div>
+        <div class="part-selector">
+          <label class="label" for="refSelect">Referensi</label>
+          <select id="refSelect" class="select-custom" bind:value={selectedRefName}>
+            {#if references.length === 0}
+              <option value="">— Belum ada referensi —</option>
+            {:else}
+              {#each references as ref}
+                <option value={ref.name}>{ref.name} ({ref.shape})</option>
+              {/each}
+            {/if}
+          </select>
+        </div>
       </div>
     </div>
 
@@ -1358,20 +1361,54 @@
   .session-badge.inactive {
     color: var(--clr-text-dim);
   }
+  .session-controls-group {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-5);
+    flex-wrap: wrap;
+  }
   .part-selector {
     display: flex;
     align-items: center;
-    gap: var(--sp-2);
-  }
-  .part-selector .select {
-    width: auto;
-    min-width: 220px;
-    min-height: 48px;
-    font-size: var(--fs-md);
+    gap: var(--sp-3);
   }
   .part-selector .label {
     margin-bottom: 0;
     white-space: nowrap;
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    color: var(--clr-text-muted);
+  }
+  .select-custom {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-color: var(--clr-surface);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    background-size: 16px;
+    padding: 10px 38px 10px 14px;
+    font-family: var(--font-family);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    color: var(--clr-text);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    min-width: 220px;
+    height: 42px;
+    cursor: pointer;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+  .select-custom:hover {
+    border-color: var(--clr-border-light);
+    background-color: var(--clr-surface-2);
+  }
+  .select-custom:focus {
+    outline: none;
+    border-color: var(--clr-accent);
+    box-shadow: 0 0 0 3px var(--clr-accent-subtle);
   }
 
   .operator-page {
