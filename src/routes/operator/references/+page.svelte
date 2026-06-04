@@ -23,6 +23,9 @@
     Calendar,
     Clock,
     X,
+    Camera,
+    Smartphone,
+    Scan,
   } from "@lucide/svelte";
 
   let loading = $state(true);
@@ -38,6 +41,36 @@
   let referenceName = $state("");
   let uploadProgress = $state("");
   let useStream = $state(false);
+  const CV_STREAM_URL = import.meta.env.VITE_CV_STREAM_URL || "http://localhost:8000/video_feed";
+
+  // Modal camera state variables
+  let videoElementModal = $state(null);
+  let imgElementModal = $state(null);
+  let streamModal = $state(null);
+  let capturedImageModal = $state(null);
+  let availableCamerasModal = $state([]);
+  let selectedCameraModal = $state("");
+  let useIpCameraModal = $state(false);
+  let ipCameraUrlModal = $state("http://192.168.1.100:8080/video");
+
+  // Auto-attach stream when videoElementModal is recreated
+  $effect(() => {
+    if (videoElementModal && streamModal && videoElementModal.srcObject !== streamModal) {
+      videoElementModal.srcObject = streamModal;
+      videoElementModal
+        .play()
+        .catch((err) => console.error("Auto-play error in modal:", err));
+    }
+  });
+
+  // Reactive camera control based on modal visibility and source
+  $effect(() => {
+    if (showAddForm && useStream && !useIpCameraModal) {
+      loadCamerasModal();
+    } else {
+      stopCameraModal();
+    }
+  });
 
   async function loadReferences() {
     // Wait for auth to be ready
@@ -101,6 +134,88 @@
     }
   }
 
+  // Camera Helper Functions for Modal
+  async function loadCamerasModal() {
+    try {
+      await navigator.mediaDevices.getUserMedia({ video: true });
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      availableCamerasModal = devices.filter(
+        (device) => device.kind === "videoinput",
+      );
+      if (availableCamerasModal.length > 0) {
+        if (!selectedCameraModal) {
+          selectedCameraModal = availableCamerasModal[availableCamerasModal.length - 1].deviceId;
+        }
+        await startCameraModal();
+      }
+    } catch (err) {
+      error = "Gagal load daftar kamera: " + err.message;
+    }
+  }
+
+  async function startCameraModal() {
+    try {
+      if (streamModal) {
+        streamModal.getTracks().forEach((track) => track.stop());
+        streamModal = null;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const constraints = {
+        video: {
+          deviceId: selectedCameraModal ? { exact: selectedCameraModal } : undefined,
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      };
+
+      streamModal = await navigator.mediaDevices.getUserMedia(constraints);
+
+      if (videoElementModal) {
+        videoElementModal.srcObject = streamModal;
+        videoElementModal.onloadedmetadata = () => {
+          videoElementModal.play().catch((err) => {
+            console.error("Error playing video:", err);
+            error = "Gagal memutar video: " + err.message;
+          });
+        };
+      }
+    } catch (err) {
+      error = "Gagal akses kamera: " + err.message;
+    }
+  }
+
+  function stopCameraModal() {
+    if (streamModal) {
+      streamModal.getTracks().forEach((track) => track.stop());
+      streamModal = null;
+    }
+    capturedImageModal = null;
+  }
+
+  async function capturePhotoModal() {
+    const sourceElement = useIpCameraModal ? imgElementModal : videoElementModal;
+    if (!sourceElement) return;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 1280;
+    canvas.height = 720;
+    const ctx = canvas.getContext("2d");
+
+    const width = sourceElement.videoWidth || sourceElement.naturalWidth || canvas.width;
+    const height = sourceElement.videoHeight || sourceElement.naturalHeight || canvas.height;
+
+    ctx.drawImage(sourceElement, 0, 0, width, height, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.85),
+    );
+
+    capturedImageModal = URL.createObjectURL(blob);
+  }
+
   async function handleSaveFromStream() {
     if (!referenceName.trim()) {
       error = "Please provide reference name";
@@ -112,21 +227,30 @@
       return;
     }
 
+    if (!capturedImageModal) {
+      error = "Silakan ambil foto objek terlebih dahulu";
+      return;
+    }
+
     saving = true;
     error = "";
-    uploadProgress = "Capturing...";
+    uploadProgress = "Mengirim gambar ke CV program...";
 
     try {
-      const cvResult = await saveReferenceFromStream(
+      const responseBlob = await fetch(capturedImageModal);
+      const imageBlob = await responseBlob.blob();
+
+      const cvResult = await saveReferenceFromImage(
+        imageBlob,
         referenceName.trim(),
         cvConfig,
       );
 
       if (!cvResult.success) {
-        throw new Error(cvResult.error || "Failed to capture from stream");
+        throw new Error(cvResult.error || "Failed to process image");
       }
 
-      uploadProgress = "Saving...";
+      uploadProgress = "Menyimpan ke database...";
 
       const ref = cvResult.reference;
       await saveReference({
@@ -140,6 +264,7 @@
       });
 
       referenceName = "";
+      capturedImageModal = null;
       uploadProgress = "";
       showAddForm = false;
 
@@ -477,7 +602,7 @@
             }}
             disabled={saving}
           >
-            <Database size={14} class="mr-2" /> Capture dari CV Program
+            <Camera size={14} class="mr-2" /> Ambil dari Kamera
           </button>
         </div>
 
@@ -505,13 +630,116 @@
             </div>
           </div>
         {:else}
-          <div class="capture-info-box">
-            <Database size={32} class="info-icon" />
-            <p class="info-text">Akan mengambil frame saat ini dari CV program yang sedang berjalan</p>
-            <p class="hint text-center">
-              Pastikan Main-ProgramV7.py sudah running dan object sudah diposisikan
-            </p>
-          </div>
+          {#if !capturedImageModal}
+            <!-- Live Camera Feed Selection (Webcam vs IP Camera) -->
+            <div class="mode-toggle" style="margin-bottom: var(--sp-3);">
+              <button
+                class="mode-btn"
+                class:active={useIpCameraModal === false}
+                onclick={() => useIpCameraModal = false}
+                type="button"
+              >
+                <Camera size={14} /> Webcam
+              </button>
+              <button
+                class="mode-btn"
+                class:active={useIpCameraModal === true}
+                onclick={() => useIpCameraModal = true}
+                type="button"
+              >
+                <Smartphone size={14} /> IP Camera
+              </button>
+            </div>
+
+            {#if useIpCameraModal}
+              <!-- IP Camera Feed Preview -->
+              <div class="camera-feed" style="position: relative; width: 100%; height: 240px; border: 1px solid var(--clr-border); border-radius: var(--radius-md); overflow: hidden; background: var(--clr-surface-2); margin-bottom: var(--sp-3);">
+                <img
+                  bind:this={imgElementModal}
+                  src={ipCameraUrlModal}
+                  alt="IP Camera Modal"
+                  style="width: 100%; height: 100%; object-fit: contain; display: block;"
+                  onerror={(e) => {
+                    e.target.style.display = "none";
+                    e.target.nextElementSibling.style.display = "flex";
+                  }}
+                  onload={(e) => {
+                    e.target.style.display = "block";
+                    e.target.nextElementSibling.style.display = "none";
+                  }}
+                />
+                <div class="stream-fallback" style="position: absolute; inset: 0; display: none; align-items: center; justify-content: center; color: var(--clr-text-dim); font-size: var(--fs-xs); flex-direction: column; gap: var(--sp-2);">
+                  <AlertCircle size={24} />
+                  <p>IP Camera tidak terhubung</p>
+                </div>
+              </div>
+              <div class="form-group" style="margin-bottom: var(--sp-3);">
+                <input
+                  type="text"
+                  class="input"
+                  bind:value={ipCameraUrlModal}
+                  placeholder="URL IP Camera (contoh: http://192.168.1.100:8080/video)"
+                  title="URL IP Camera"
+                />
+              </div>
+            {:else}
+              <!-- Local Webcam Feed Preview -->
+              <div class="camera-feed" style="position: relative; width: 100%; height: 240px; border: 1px solid var(--clr-border); border-radius: var(--radius-md); overflow: hidden; background: var(--clr-surface-2); margin-bottom: var(--sp-3);">
+                <video
+                  bind:this={videoElementModal}
+                  autoplay
+                  playsinline
+                  muted
+                  style="width: 100%; height: 100%; object-fit: contain; display: block;"
+                ></video>
+              </div>
+              {#if availableCamerasModal.length > 0}
+                <div class="form-group" style="margin-bottom: var(--sp-3);">
+                  <select
+                    class="select"
+                    bind:value={selectedCameraModal}
+                    onchange={async () => await startCameraModal()}
+                    title="Pilih Kamera"
+                    style="height: 38px; width: 100%; padding: 6px 12px; font-size: 14px; border: 1px solid var(--clr-border); border-radius: var(--radius-sm);"
+                  >
+                    {#each availableCamerasModal as camera}
+                      <option value={camera.deviceId}>
+                        {camera.label || `Camera ${availableCamerasModal.indexOf(camera) + 1}`}
+                      </option>
+                    {/each}
+                  </select>
+                </div>
+              {/if}
+            {/if}
+
+            <button
+              class="inspect-btn"
+              style="width: 100%; margin-bottom: var(--sp-3); margin-top: auto; height: 50px; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: var(--radius-md);"
+              onclick={capturePhotoModal}
+              type="button"
+              disabled={saving}
+            >
+              <Scan size={20} /> Ambil Foto Objek
+            </button>
+          {:else}
+            <!-- Preview Captured Image -->
+            <div class="camera-feed" style="position: relative; width: 100%; height: 240px; border: 1px solid var(--clr-border); border-radius: var(--radius-md); overflow: hidden; background: var(--clr-surface-2); margin-bottom: var(--sp-3);">
+              <img
+                src={capturedImageModal}
+                alt="Preview"
+                style="width: 100%; height: 100%; object-fit: contain; display: block;"
+              />
+            </div>
+            <button
+              class="btn btn-secondary"
+              style="width: 100%; margin-bottom: var(--sp-3); height: 50px; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; gap: 8px;"
+              onclick={() => (capturedImageModal = null)}
+              type="button"
+              disabled={saving}
+            >
+              Ulangi Foto
+            </button>
+          {/if}
         {/if}
 
         {#if uploadProgress}
@@ -528,7 +756,7 @@
           onclick={useStream ? handleSaveFromStream : handleSaveFromImage}
           disabled={saving ||
             (!useStream && (!imageFile || !referenceName.trim())) ||
-            (useStream && !referenceName.trim())}
+            (useStream && (!referenceName.trim() || !capturedImageModal))}
         >
           {#if saving}
             <span class="spinner"></span> Saving...

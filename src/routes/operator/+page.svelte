@@ -10,9 +10,9 @@
     CircleDot,
     Circle,
     Check,
-    Monitor,
-    Smartphone,
     Database,
+    Camera,
+    Smartphone,
   } from "@lucide/svelte";
   import { onMount, onDestroy } from "svelte";
   import {
@@ -59,7 +59,7 @@
     console.warn("VITE_CV_STREAM_URL not set, CV stream will not work");
   }
   const CV_STREAM_URL = import.meta.env.VITE_CV_STREAM_URL;
-  let inspectionMode = $state("local");
+  let inspectionMode = $state("online");
   let videoElement = $state(null);
   let imgElement = $state(null);
   let stream = $state(null);
@@ -102,6 +102,15 @@
       videoElement
         .play()
         .catch((err) => console.error("Auto-play error:", err));
+    }
+  });
+
+  // Reactive camera control based on useIpCamera setting
+  $effect(() => {
+    if (useIpCamera) {
+      stopCamera();
+    } else {
+      loadCameras();
     }
   });
 
@@ -503,15 +512,7 @@
     }
   }
 
-  function switchMode(newMode) {
-    inspectionMode = newMode;
-    if (newMode === "online") {
-      loadCameras();
-    } else {
-      stopCamera();
-      capturedImage = null;
-    }
-  }
+  // switchMode function removed because only online mode is supported
 
   function playAlarm() {
     try {
@@ -961,568 +962,138 @@
       <div class="camera-section">
         <div class="section-label">{$t("operator.live_camera")}</div>
 
-        {#if inspectionMode === "local"}
-          <!-- Local Mode: CV Camera Feed -->
-          <div class="camera-feed">
-            <div class="camera-placeholder">
-              <img
-                src={CV_STREAM_URL}
-                alt="CV Camera Feed"
-                class="camera-video"
-                onerror={(e) => {
-                  e.target.style.display = "none";
-                  e.target.nextElementSibling.style.display = "flex";
-                }}
-                onload={(e) => {
-                  e.target.style.display = "block";
-                  e.target.nextElementSibling.style.display = "none";
-                }}
-              />
-              <!-- Bounding Box Overlay Canvas -->
-              {#if detections.objects && detections.objects.length > 0}
-                <svg
-                  class="bbox-overlay"
-                  viewBox="0 0 {videoStreamSize.width} {videoStreamSize.height}"
-                  preserveAspectRatio="none"
-                >
-                  <defs>
-                    <!-- Define filters for glow effects -->
-                    <filter id="glow">
-                      <feGaussianBlur stdDeviation="2" result="coloredBlur" />
-                      <feMerge>
-                        <feMergeNode in="coloredBlur" />
-                        <feMergeNode in="SourceGraphic" />
-                      </feMerge>
-                    </filter>
-                  </defs>
-
-                  {#each detections.objects as obj, i}
-                    {@const result = detections.results[i]}
-                    {@const status = result?.status || "NO REF"}
-                    {@const matchedRef = result?.matched_ref || null}
-                    {@const color =
-                      status === "GOOD"
-                        ? "#32DC32"
-                        : status === "NO GOOD"
-                          ? "#2828DC"
-                          : "#FFA500"}
-                    {@const yellowColor = "#00D2FF"}
-                    {@const purpleColor = "#C832C8"}
-                    {@const tealColor = "#78DCB4"}
-
-                    <!-- Contour (teal outline) -->
-                    {#if obj.contour && obj.contour.length > 0}
-                      <polyline
-                        points={obj.contour
-                          .map((p) => `${p[0][0]},${p[0][1]}`)
-                          .join(" ")}
-                        fill="none"
-                        stroke={tealColor}
-                        stroke-width="1"
-                        opacity="0.8"
-                      />
-                    {/if}
-
-                    <!-- Main Bounding Box -->
-                    {#if obj.shape === "circle"}
-                      <!-- Circle with radius -->
-                      <circle
-                        cx={obj.center[0]}
-                        cy={obj.center[1]}
-                        r={obj.radius_px}
-                        fill="none"
-                        stroke={color}
-                        stroke-width="2"
-                        opacity="0.9"
-                      />
-
-                      <!-- Diameter dimension line -->
-                      {@const cx = obj.center[0]}
-                      {@const cy = obj.center[1]}
-                      {@const r = obj.radius_px}
-                      {@const offset = 28}
-
-                      <!-- Horizontal diameter line with arrows -->
-                      <line
-                        x1={cx - r}
-                        y1={cy - offset}
-                        x2={cx + r}
-                        y2={cy - offset}
-                        stroke={yellowColor}
-                        stroke-width="1"
-                      />
-                      <line
-                        x1={cx - r}
-                        y1={cy}
-                        x2={cx - r}
-                        y2={cy - offset}
-                        stroke={yellowColor}
-                        stroke-width="1"
-                      />
-                      <line
-                        x1={cx + r}
-                        y1={cy}
-                        x2={cx + r}
-                        y2={cy - offset}
-                        stroke={yellowColor}
-                        stroke-width="1"
-                      />
-
-                      <!-- Arrow heads -->
-                      <polygon
-                        points="{cx - r},{cy - offset} {cx - r - 6},{cy -
-                          offset -
-                          6} {cx - r - 6},{cy - offset + 6}"
-                        fill={yellowColor}
-                      />
-                      <polygon
-                        points="{cx + r},{cy - offset} {cx + r + 6},{cy -
-                          offset -
-                          6} {cx + r + 6},{cy - offset + 6}"
-                        fill={yellowColor}
-                      />
-
-                      <!-- Dimension text with background -->
-                      <rect
-                        x={cx - 30}
-                        y={cy - offset - 20}
-                        width="60"
-                        height="16"
-                        fill="#121212"
-                        opacity="0.8"
-                        rx="2"
-                      />
-                      <text
-                        x={cx}
-                        y={cy - offset - 8}
-                        fill={yellowColor}
-                        font-size="14"
-                        font-weight="bold"
-                        text-anchor="middle"
-                        font-family="Arial"
-                      >
-                        Ø{obj.diameter_mm.toFixed(1)}mm
-                      </text>
-
-                      {@const topY = cy - r - 14}
-
-                      <!-- Object label with background -->
-                      <rect
-                        x={obj.bbox[0] - 5}
-                        y={topY - 18}
-                        width="150"
-                        height="16"
-                        fill="#141414"
-                        opacity="0.8"
-                        rx="2"
-                      />
-                      <text
-                        x={obj.bbox[0]}
-                        y={topY - 6}
-                        fill={color}
-                        font-size="14"
-                        font-weight="bold"
-                        font-family="Arial"
-                      >
-                        #{i + 1}
-                        {obj.shape.toUpperCase()}
-                      </text>
-
-                      <!-- Status label with background -->
-                      {@const statusText = matchedRef
-                        ? `${status}  [${matchedRef}]`
-                        : status}
-                      <rect
-                        x={obj.bbox[0] - 5}
-                        y={topY - 38}
-                        width={statusText.length * 8 + 10}
-                        height="18"
-                        fill="#141414"
-                        opacity="0.8"
-                        rx="2"
-                      />
-                      <text
-                        x={obj.bbox[0]}
-                        y={topY - 24}
-                        fill={color}
-                        font-size="16"
-                        font-weight="bold"
-                        font-family="Arial"
-                      >
-                        {statusText}
-                      </text>
-                    {:else}
-                      <!-- Rotated Rectangle Bounding Box -->
-                      {#if obj.rot_box && obj.rot_box.length === 4}
-                        <polygon
-                          points={obj.rot_box
-                            .map((p) => `${p[0]},${p[1]}`)
-                            .join(" ")}
-                          fill="none"
-                          stroke={color}
-                          stroke-width="2"
-                          opacity="0.9"
-                        />
-
-                        <!-- Dimension lines -->
-                        {@const box = obj.rot_box}
-                        {@const dist = (p1, p2) =>
-                          Math.sqrt(
-                            (p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2,
-                          )}
-                        {@const sa = dist(box[0], box[1])}
-                        {@const sb = dist(box[1], box[2])}
-                        {@const [lp1, lp2, sp1, sp2] =
-                          sa >= sb
-                            ? [box[0], box[1], box[1], box[2]]
-                            : [box[1], box[2], box[0], box[1]]}
-                        {@const offset = 28}
-
-                        <!-- Width dimension line (yellow) -->
-                        {@const dx1 = lp2[0] - lp1[0]}
-                        {@const dy1 = lp2[1] - lp1[1]}
-                        {@const len1 = Math.sqrt(dx1 * dx1 + dy1 * dy1)}
-                        {@const nx1 = (-dy1 / len1) * offset}
-                        {@const ny1 = (dx1 / len1) * offset}
-                        {@const op1_1 = [lp1[0] + nx1, lp1[1] + ny1]}
-                        {@const op1_2 = [lp2[0] + nx1, lp2[1] + ny1]}
-                        {@const mid1 = [
-                          (op1_1[0] + op1_2[0]) / 2,
-                          (op1_1[1] + op1_2[1]) / 2,
-                        ]}
-
-                        <line
-                          x1={lp1[0]}
-                          y1={lp1[1]}
-                          x2={op1_1[0]}
-                          y2={op1_1[1]}
-                          stroke={yellowColor}
-                          stroke-width="1"
-                        />
-                        <line
-                          x1={lp2[0]}
-                          y1={lp2[1]}
-                          x2={op1_2[0]}
-                          y2={op1_2[1]}
-                          stroke={yellowColor}
-                          stroke-width="1"
-                        />
-                        <line
-                          x1={op1_1[0]}
-                          y1={op1_1[1]}
-                          x2={op1_2[0]}
-                          y2={op1_2[1]}
-                          stroke={yellowColor}
-                          stroke-width="1"
-                        />
-
-                        <!-- Width text -->
-                        <rect
-                          x={mid1[0] - 30}
-                          y={mid1[1] - 18}
-                          width="60"
-                          height="16"
-                          fill="#121212"
-                          opacity="0.8"
-                          rx="2"
-                        />
-                        <text
-                          x={mid1[0]}
-                          y={mid1[1] - 6}
-                          fill={yellowColor}
-                          font-size="14"
-                          font-weight="bold"
-                          text-anchor="middle"
-                          font-family="Arial"
-                        >
-                          {obj.width_mm.toFixed(1)}mm
-                        </text>
-
-                        <!-- Height dimension line (purple) -->
-                        {@const dx2 = sp2[0] - sp1[0]}
-                        {@const dy2 = sp2[1] - sp1[1]}
-                        {@const len2 = Math.sqrt(dx2 * dx2 + dy2 * dy2)}
-                        {@const nx2 = (-dy2 / len2) * offset}
-                        {@const ny2 = (dx2 / len2) * offset}
-                        {@const op2_1 = [sp1[0] + nx2, sp1[1] + ny2]}
-                        {@const op2_2 = [sp2[0] + nx2, sp2[1] + ny2]}
-                        {@const mid2 = [
-                          (op2_1[0] + op2_2[0]) / 2,
-                          (op2_1[1] + op2_2[1]) / 2,
-                        ]}
-
-                        <line
-                          x1={sp1[0]}
-                          y1={sp1[1]}
-                          x2={op2_1[0]}
-                          y2={op2_1[1]}
-                          stroke={purpleColor}
-                          stroke-width="1"
-                        />
-                        <line
-                          x1={sp2[0]}
-                          y1={sp2[1]}
-                          x2={op2_2[0]}
-                          y2={op2_2[1]}
-                          stroke={purpleColor}
-                          stroke-width="1"
-                        />
-                        <line
-                          x1={op2_1[0]}
-                          y1={op2_1[1]}
-                          x2={op2_2[0]}
-                          y2={op2_2[1]}
-                          stroke={purpleColor}
-                          stroke-width="1"
-                        />
-
-                        <!-- Height text -->
-                        <rect
-                          x={mid2[0] - 30}
-                          y={mid2[1] - 18}
-                          width="60"
-                          height="16"
-                          fill="#121212"
-                          opacity="0.8"
-                          rx="2"
-                        />
-                        <text
-                          x={mid2[0]}
-                          y={mid2[1] - 6}
-                          fill={purpleColor}
-                          font-size="14"
-                          font-weight="bold"
-                          text-anchor="middle"
-                          font-family="Arial"
-                        >
-                          {obj.height_mm.toFixed(1)}mm
-                        </text>
-                      {/if}
-
-                      {@const topY = obj.bbox[1] - 14}
-
-                      <!-- Object label with background -->
-                      <rect
-                        x={obj.bbox[0] - 5}
-                        y={topY - 18}
-                        width="180"
-                        height="16"
-                        fill="#141414"
-                        opacity="0.8"
-                        rx="2"
-                      />
-                      <text
-                        x={obj.bbox[0]}
-                        y={topY - 6}
-                        fill={color}
-                        font-size="14"
-                        font-weight="bold"
-                        font-family="Arial"
-                      >
-                        #{i + 1}
-                        {obj.shape.toUpperCase()}
-                        {obj.width_mm.toFixed(1)}×{obj.height_mm.toFixed(1)}mm
-                      </text>
-
-                      <!-- Status label with background -->
-                      {@const statusText = matchedRef
-                        ? `${status}  [${matchedRef}]`
-                        : status}
-                      <rect
-                        x={obj.bbox[0] - 5}
-                        y={topY - 38}
-                        width={statusText.length * 8 + 10}
-                        height="18"
-                        fill="#141414"
-                        opacity="0.8"
-                        rx="2"
-                      />
-                      <text
-                        x={obj.bbox[0]}
-                        y={topY - 24}
-                        fill={color}
-                        font-size="16"
-                        font-weight="bold"
-                        font-family="Arial"
-                      >
-                        {statusText}
-                      </text>
-                    {/if}
-                  {/each}
-                </svg>
-              {/if}
-              <div class="camera-fallback" style="display: flex;">
-                <div class="camera-circle"></div>
-                <div class="crosshair h"></div>
-                <div class="crosshair v"></div>
-                <div class="corner tl"></div>
-                <div class="corner tr"></div>
-                <div class="corner bl"></div>
-                <div class="corner br"></div>
-                {#if !inspecting && !hasResult}
-                  <p class="camera-hint">{$t("operator.align_part")}</p>
-                {/if}
-                {#if inspecting}
-                  <div class="scan-line"></div>
-                {/if}
-              </div>
-            </div>
-            <div class="camera-badge" class:connected={cvOnline}>
-              <span class="dot"></span>
-              {cvOnline ? "CV Online" : "CV Offline"}
-            </div>
-          </div>
-
-          <!-- Local Mode Inspect Button -->
-          <button
-            class="inspect-btn"
-            class:inspecting
-            onclick={startInspection}
-            disabled={inspecting ||
-              !selectedPartId ||
-              !activeSession ||
-              !cvOnline}
-          >
-            {#if inspecting}
-              <span class="spinner"></span> Triggering CV...
-            {:else}
-              <Scan size={22} /> {$t("operator.inspect_btn")}
-            {/if}
-          </button>
-        {:else}
-          <!-- Online Mode -->
-          <div
-            style="display: {capturedImage
-              ? 'none'
-              : 'flex'}; flex-direction: column; flex: 1; gap: var(--sp-3);"
-          >
-            {#if useIpCamera}
-              <div class="camera-feed">
-                <div class="camera-placeholder">
-                  <img
-                    bind:this={imgElement}
-                    src={ipCameraUrl}
-                    alt="IP Camera Feed"
-                    class="camera-video"
-                    crossorigin="anonymous"
-                    style="display: block;"
-                    onerror={(e) => {
-                      e.target.style.display = "none";
-                      e.target.nextElementSibling.querySelector(
-                        ".error-text",
-                      ).style.display = "block";
-                    }}
-                    onload={(e) => {
-                      e.target.style.display = "block";
-                      e.target.nextElementSibling.querySelector(
-                        ".error-text",
-                      ).style.display = "none";
-                    }}
-                  />
-                  <div
-                    class="camera-fallback"
-                    style="display: flex; pointer-events: none;"
-                  >
-                    <div class="camera-circle"></div>
-                    <div class="crosshair h"></div>
-                    <div class="crosshair v"></div>
-                    <div class="corner tl"></div>
-                    <div class="corner tr"></div>
-                    <div class="corner bl"></div>
-                    <div class="corner br"></div>
-                    <p
-                      class="camera-hint error-text"
-                      style="display: none; color: var(--clr-ng); background: rgba(0,0,0,0.7); padding: 4px 8px; border-radius: 4px; margin-bottom: 30px;"
-                    >
-                      Tidak dapat terhubung ke IP Camera
-                    </p>
-                    <p class="camera-hint">Posisikan part di tengah</p>
-                  </div>
-                </div>
-              </div>
-            {:else}
-              <div class="camera-feed">
-                <div class="camera-placeholder">
-                  <video
-                    bind:this={videoElement}
-                    class="camera-video"
-                    autoplay
-                    playsinline
-                    muted
-                    style="display: block;"
-                    onplaying={(e) => {
-                      e.target.style.display = "block";
-                    }}
-                    onerror={(e) => {
-                      e.target.style.display = "none";
-                    }}
-                  ></video>
-                  <div
-                    class="camera-fallback"
-                    style="display: flex; pointer-events: none;"
-                  >
-                    <div class="camera-circle"></div>
-                    <div class="crosshair h"></div>
-                    <div class="crosshair v"></div>
-                    <div class="corner tl"></div>
-                    <div class="corner tr"></div>
-                    <div class="corner bl"></div>
-                    <div class="corner br"></div>
-                    <p class="camera-hint">{$t("operator.align_part")}</p>
-                  </div>
-                </div>
-              </div>
-            {/if}
-
-            <button
-              class="inspect-btn"
-              style="width: 100%; margin-top: auto;"
-              onclick={capturePhoto}
-              disabled={!selectedPartId || !activeSession}
-            >
-              <Scan size={22} /> Ambil Foto
-            </button>
-          </div>
-
-          {#if capturedImage}
-            <!-- Preview Mode setelah foto diambil -->
+        <!-- Online Mode Camera Feed -->
+        <div
+          style="display: {capturedImage
+            ? 'none'
+            : 'flex'}; flex-direction: column; flex: 1; gap: var(--sp-3);"
+        >
+          {#if useIpCamera}
             <div class="camera-feed">
               <div class="camera-placeholder">
                 <img
-                  src={capturedImage}
-                  alt="Preview"
+                  bind:this={imgElement}
+                  src={ipCameraUrl}
+                  alt="IP Camera Feed"
                   class="camera-video"
+                  crossorigin="anonymous"
                   style="display: block;"
+                  onerror={(e) => {
+                    e.target.style.display = "none";
+                    e.target.nextElementSibling.querySelector(
+                      ".error-text",
+                    ).style.display = "block";
+                  }}
+                  onload={(e) => {
+                    e.target.style.display = "block";
+                    e.target.nextElementSibling.querySelector(
+                      ".error-text",
+                    ).style.display = "none";
+                  }}
                 />
+                <div
+                  class="camera-fallback"
+                  style="display: flex; pointer-events: none;"
+                >
+                  <div class="camera-circle"></div>
+                  <div class="crosshair h"></div>
+                  <div class="crosshair v"></div>
+                  <div class="corner tl"></div>
+                  <div class="corner tr"></div>
+                  <div class="corner bl"></div>
+                  <div class="corner br"></div>
+                  <p
+                    class="camera-hint error-text"
+                    style="display: none; color: var(--clr-ng); background: rgba(0,0,0,0.7); padding: 4px 8px; border-radius: 4px; margin-bottom: 30px;"
+                  >
+                    Tidak dapat terhubung ke IP Camera
+                  </p>
+                  <p class="camera-hint">Posisikan part di tengah</p>
+                </div>
               </div>
             </div>
-
-            <div
-              style="display: flex; gap: var(--sp-3); margin-top: var(--sp-3);"
-            >
-              <button
-                class="btn btn-secondary"
-                style="flex: 1; min-height: 64px; font-family: var(--font-heading); font-size: 1.1rem; font-weight: bold; border-radius: var(--radius-lg);"
-                onclick={() => (capturedImage = null)}
-                disabled={onlineProcessing}
-              >
-                Ulangi
-              </button>
-              <button
-                class="inspect-btn"
-                style="flex: 2; margin: 0;"
-                class:inspecting={onlineProcessing}
-                onclick={submitOnlineInspection}
-                disabled={onlineProcessing}
-              >
-                {#if onlineProcessing}
-                  <span class="spinner"></span> Mengirim...
-                {:else}
-                  <CheckCircle size={22} /> Kirim Inspeksi
-                {/if}
-              </button>
+          {:else}
+            <div class="camera-feed">
+              <div class="camera-placeholder">
+                <video
+                  bind:this={videoElement}
+                  class="camera-video"
+                  autoplay
+                  playsinline
+                  muted
+                  style="display: block;"
+                  onplaying={(e) => {
+                    e.target.style.display = "block";
+                  }}
+                  onerror={(e) => {
+                    e.target.style.display = "none";
+                  }}
+                ></video>
+                <div
+                  class="camera-fallback"
+                  style="display: flex; pointer-events: none;"
+                >
+                  <div class="camera-circle"></div>
+                  <div class="crosshair h"></div>
+                  <div class="crosshair v"></div>
+                  <div class="corner tl"></div>
+                  <div class="corner tr"></div>
+                  <div class="corner bl"></div>
+                  <div class="corner br"></div>
+                  <p class="camera-hint">{$t("operator.align_part")}</p>
+                </div>
+              </div>
             </div>
           {/if}
+
+          <button
+            class="inspect-btn"
+            style="width: 100%; margin-top: auto;"
+            onclick={capturePhoto}
+            disabled={!selectedPartId || !activeSession}
+          >
+            <Scan size={22} /> Ambil Foto
+          </button>
+        </div>
+
+        {#if capturedImage}
+          <!-- Preview Mode setelah foto diambil -->
+          <div class="camera-feed">
+            <div class="camera-placeholder">
+              <img
+                src={capturedImage}
+                alt="Preview"
+                class="camera-video"
+                style="display: block;"
+              />
+            </div>
+          </div>
+
+          <div
+            style="display: flex; gap: var(--sp-3); margin-top: var(--sp-3);"
+          >
+            <button
+              class="btn btn-secondary"
+              style="flex: 1; min-height: 64px; font-family: var(--font-heading); font-size: 1.1rem; font-weight: bold; border-radius: var(--radius-lg);"
+              onclick={() => (capturedImage = null)}
+              disabled={onlineProcessing}
+            >
+              Ulangi
+            </button>
+            <button
+              class="inspect-btn"
+              style="flex: 2; margin: 0;"
+              class:inspecting={onlineProcessing}
+              onclick={submitOnlineInspection}
+              disabled={onlineProcessing}
+            >
+              {#if onlineProcessing}
+                <span class="spinner"></span> Mengirim...
+              {:else}
+                <CheckCircle size={22} /> Kirim Inspeksi
+              {/if}
+            </button>
+          </div>
         {/if}
       </div>
 
@@ -1619,66 +1190,53 @@
           </div>
         {/if}
 
-        <!-- Mode Toggle -->
-        <div class="mode-toggle">
-          <button
-            class="mode-btn"
-            class:active={inspectionMode === "local"}
-            onclick={() => switchMode("local")}
-          >
-            <Monitor size={18} /> Mode Lokal
-          </button>
-          <button
-            class="mode-btn"
-            class:active={inspectionMode === "online"}
-            onclick={() => switchMode("online")}
-          >
-            <Smartphone size={18} /> Mode Online
-          </button>
-        </div>
-
-        {#if inspectionMode === "online"}
-          <div class="online-header-row">
-            <div class="online-mode-options">
-              <label class="radio-option">
-                <input type="radio" bind:group={useIpCamera} value={false} />
-                Webcam/USB Camera
-              </label>
-              <label class="radio-option">
-                <input type="radio" bind:group={useIpCamera} value={true} />
-                IP Camera (HP)
-              </label>
-            </div>
-
-            {#if useIpCamera}
-              <div class="online-controls">
-                <input
-                  type="text"
-                  class="input"
-                  bind:value={ipCameraUrl}
-                  placeholder="URL IP Camera (contoh: http://192.168.1.100:8080/video)"
-                  title="URL IP Camera"
-                />
-              </div>
-            {:else}
-              <div class="online-controls">
-                <select
-                  class="select"
-                  bind:value={selectedCamera}
-                  onchange={async () => await startCamera()}
-                  title="Pilih Kamera"
-                >
-                  {#each availableCameras as camera}
-                    <option value={camera.deviceId}>
-                      {camera.label ||
-                        `Camera ${availableCameras.indexOf(camera) + 1}`}
-                    </option>
-                  {/each}
-                </select>
-              </div>
-            {/if}
+        <!-- Camera Selection Options -->
+        <div class="online-header-row">
+          <div class="mode-toggle">
+            <button
+              class="mode-btn"
+              class:active={useIpCamera === false}
+              onclick={() => useIpCamera = false}
+            >
+              <Camera size={18} /> Webcam/USB Camera
+            </button>
+            <button
+              class="mode-btn"
+              class:active={useIpCamera === true}
+              onclick={() => useIpCamera = true}
+            >
+              <Smartphone size={18} /> IP Camera (HP)
+            </button>
           </div>
-        {/if}
+
+          {#if useIpCamera}
+            <div class="online-controls">
+              <input
+                type="text"
+                class="input"
+                bind:value={ipCameraUrl}
+                placeholder="URL IP Camera (contoh: http://192.168.1.100:8080/video)"
+                title="URL IP Camera"
+              />
+            </div>
+          {:else}
+            <div class="online-controls">
+              <select
+                class="select"
+                bind:value={selectedCamera}
+                onchange={async () => await startCamera()}
+                title="Pilih Kamera"
+              >
+                {#each availableCameras as camera}
+                  <option value={camera.deviceId}>
+                    {camera.label ||
+                      `Camera ${availableCameras.indexOf(camera) + 1}`}
+                  </option>
+                {/each}
+              </select>
+            </div>
+          {/if}
+        </div>
 
         <!-- Session History -->
         <div class="history-section">
@@ -2439,6 +1997,10 @@
     border-radius: var(--radius-md);
     cursor: pointer;
     transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
   }
 
   .mode-btn:hover {
