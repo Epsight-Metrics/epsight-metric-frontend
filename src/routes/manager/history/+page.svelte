@@ -109,7 +109,7 @@
         partCode: item.part?.partCode || '-',
         vendor: item.part?.vendorName || '-',
         dimensions: item.nilaiDimensi || {},
-        status: (item.status === 'GOOD' || item.status === 'OK') ? 'OK' : 'NG',
+        status: (!item.matchedRef || item.matchedRef === '-' || item.matchedRef === 'No matched reference') ? 'NO REF' : (item.status === 'GOOD' || item.status === 'OK') ? 'OK' : 'NG',
         operator: item.operator?.name || '-',
         operatorUsername: item.operator?.username || '-',
         configVersion: item.configVersion || '-',
@@ -453,7 +453,7 @@
               <td><strong>{item.partName}</strong></td>
               <td>{item.vendor}</td>
               <td>{getDimensionSummary(item.dimensions)}</td>
-              <td><span class="badge" class:badge-ok={item.status === 'OK'} class:badge-ng={item.status === 'NG'}>{item.status}</span></td>
+              <td><span class="badge" class:badge-ok={item.status === 'OK'} class:badge-ng={item.status === 'NG'} class:badge-warning={item.status === 'NO REF'}>{item.status}</span></td>
               <td>{item.operator}</td>
             </tr>
           {/each}
@@ -505,7 +505,7 @@
                               <td><strong>{item.partName}</strong> (Code: <code>{item.partCode}</code>)</td>
                               <td>{item.vendor}</td>
                               <td>{getDimensionSummary(item.dimensions)}</td>
-                              <td><span class="badge" class:badge-ok={item.status === 'OK'} class:badge-ng={item.status === 'NG'}>{item.status}</span></td>
+                              <td><span class="badge" class:badge-ok={item.status === 'OK'} class:badge-ng={item.status === 'NG'} class:badge-warning={item.status === 'NO REF'}>{item.status}</span></td>
                             </tr>
                           {/each}
                         </tbody>
@@ -559,7 +559,7 @@
           <div class="detail-grid">
             <div><span class="label">Waktu:</span> {selectedInspection.timestamp}</div>
             <div><span class="label">Operator:</span> {selectedInspection.operator}</div>
-            <div><span class="label">Status:</span> <span class="badge" class:badge-ok={selectedInspection.status === 'OK'} class:badge-ng={selectedInspection.status === 'NG'}>{selectedInspection.status}</span></div>
+            <div><span class="label">Status:</span> <span class="badge" class:badge-ok={selectedInspection.status === 'OK'} class:badge-ng={selectedInspection.status === 'NG'} class:badge-warning={selectedInspection.status === 'NO REF'}>{selectedInspection.status}</span></div>
             <div><span class="label">ID Sesi:</span> <code>{selectedInspection.sessionId || '-'}</code></div>
           </div>
         </div>

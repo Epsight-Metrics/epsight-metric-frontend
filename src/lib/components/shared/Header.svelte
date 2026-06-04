@@ -1,19 +1,24 @@
 <script>
   import { t } from "$lib/i18n.js";
   import { auth, currentUser } from "$lib/stores/auth.js";
-  import { Menu } from "@lucide/svelte";
+  import { Menu, AlertTriangle } from "@lucide/svelte";
 
   import { goto } from "$app/navigation";
 
   let { role = "operator", title = "", navigation, onMenuClick } = $props();
 
   let showUserMenu = $state(false);
+  let showConfirmLogout = $state(false);
 
-  async function handleLogout() {
-    if (confirm($t("auth.logout_confirm"))) {
-      await auth.logout();
-      goto("/login");
-    }
+  function handleLogout() {
+    showConfirmLogout = true;
+    showUserMenu = false;
+  }
+
+  async function confirmLogout() {
+    showConfirmLogout = false;
+    await auth.logout();
+    goto("/login");
   }
 </script>
 
@@ -86,6 +91,24 @@
     onclick={() => (showUserMenu = false)}
     aria-label="Close menu"
   ></button>
+{/if}
+
+{#if showConfirmLogout}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="logout-modal-overlay" onclick={() => (showConfirmLogout = false)} role="presentation">
+    <div class="logout-modal-card animate-zoom-in" onclick={(e) => e.stopPropagation()}>
+      <div class="logout-icon-wrapper">
+        <AlertTriangle size={32} class="logout-warn-icon" />
+      </div>
+      <h3 class="logout-modal-title">Konfirmasi Keluar</h3>
+      <p class="logout-modal-text">Apakah Anda yakin ingin keluar dari sistem EPSON QC?</p>
+      <div class="logout-modal-actions">
+        <button class="btn btn-secondary" onclick={() => (showConfirmLogout = false)}>Batal</button>
+        <button class="btn btn-danger" onclick={confirmLogout}>Keluar</button>
+      </div>
+    </div>
+  </div>
 {/if}
 
 <style>
@@ -288,5 +311,82 @@
     .user-chevron {
       display: none !important;
     }
+  }
+
+  /* Logout Confirm Modal */
+  .logout-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-4);
+  }
+  .logout-modal-card {
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-lg);
+    max-width: 400px;
+    width: 100%;
+    padding: var(--sp-6);
+    box-shadow: var(--shadow-xl);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-3);
+  }
+  .logout-icon-wrapper {
+    width: 56px;
+    height: 56px;
+    background: var(--clr-ng-bg);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: var(--sp-2);
+  }
+  .logout-warn-icon {
+    color: var(--clr-ng);
+  }
+  .logout-modal-title {
+    font-family: var(--font-heading);
+    font-size: var(--fs-lg);
+    font-weight: var(--fw-bold);
+    color: var(--clr-text);
+    margin: 0;
+  }
+  .logout-modal-text {
+    font-size: var(--fs-sm);
+    color: var(--clr-text-muted);
+    margin: 0 0 var(--sp-3) 0;
+    line-height: 1.5;
+  }
+  .logout-modal-actions {
+    display: flex;
+    gap: var(--sp-3);
+    width: 100%;
+  }
+  .logout-modal-actions .btn {
+    flex: 1;
+    min-height: 44px;
+    font-size: var(--fs-sm);
+  }
+  
+  @keyframes zoomIn {
+    from {
+      transform: scale(0.95);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  .animate-zoom-in {
+    animation: zoomIn var(--transition-fast) ease forwards;
   }
 </style>

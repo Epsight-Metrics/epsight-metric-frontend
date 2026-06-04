@@ -65,7 +65,7 @@
           timestamp: new Date(item.timestamp).toLocaleString('id-ID'),
           hash: item.hash || 'No hash (legacy data)',
           configVersion: item.configVersion || 'v1.0',
-          status: (item.status === 'GOOD' || item.status === 'OK') ? 'OK' : 'NG',
+          status: (!item.matchedRef || item.matchedRef === '-' || item.matchedRef === 'No matched reference') ? 'NO REF' : (item.status === 'GOOD' || item.status === 'OK') ? 'OK' : 'NG',
           integrity,
           operator: item.operator?.name || '-',
           hasHash,
@@ -235,7 +235,7 @@
             <td class="dim">{record.timestamp}</td>
             <td><code class="hash">{record.hash}</code></td>
             <td>{record.configVersion}</td>
-            <td><span class="badge" class:badge-ok={record.status === 'OK'} class:badge-ng={record.status === 'NG'}>{record.status}</span></td>
+            <td><span class="badge" class:badge-ok={record.status === 'OK'} class:badge-ng={record.status === 'NG'} class:badge-warning={record.status === 'NO REF'}>{record.status}</span></td>
             <td>
               <span class="integrity-badge" class:valid={record.integrity === 'valid'} class:warn={record.integrity === 'warning'}>
                 {#if record.hasHash}
@@ -373,7 +373,7 @@
   .table-footer { margin-top: var(--sp-3); font-size: var(--fs-xs); color: var(--clr-text-dim); display: flex; justify-content: space-between; align-items: center; }
   .pagination { display: flex; align-items: center; gap: var(--sp-2); }
   .page-num { font-weight: var(--fw-medium); color: var(--clr-text-muted); }
-  .page { display: flex; flex-direction: column; flex: 1; overflow: hidden; height: 100%; }
+  .page { display: flex; flex-direction: column; flex: 1; height: 100%; }
   .table-container { flex: 1; overflow-y: auto; overflow-x: auto; }
 
   @media (max-width: 768px) {

@@ -10,6 +10,7 @@
     { href: "/manager", iconName: "dashboard", label: $t("nav.dashboard") },
     { href: "/manager/history", iconName: "history", label: $t("nav.history") },
     { href: "/manager/alerts", iconName: "alerts", label: $t("nav.alerts") },
+    { href: "/manager/parts", iconName: "database", label: "Kelola Part" },
   ]);
 </script>
 
@@ -28,19 +29,18 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
   }
   .manager-body {
     flex: 1;
     display: flex;
-    overflow: hidden;
+    overflow-y: auto;
   }
   .manager-main {
     flex: 1;
     padding: var(--sp-6);
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow-y: auto;
   }
 
   @media (max-width: 768px) {

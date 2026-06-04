@@ -12,16 +12,20 @@ const API_BASE = import.meta.env.VITE_API_URL
  * @returns {EventSource} The EventSource instance (call .close() to disconnect)
  */
 export function connectSSE(onMessage, onError) {
-  // Ambil token dari memory (bukan localStorage — access token disimpan di memory)
   const token = getToken();
   if (!token) {
     console.warn('No auth token for SSE connection');
     return null;
   }
 
-  // EventSource tidak support custom headers, kirim token via query param
   const url = `${API_BASE}/notifications/stream?token=${encodeURIComponent(token)}`;
-  const eventSource = new EventSource(url);
+  const eventSource = new EventSource(url, {
+    withCredentials: true
+  });
+
+  eventSource.addEventListener('connected', (e) => {
+    console.log('SSE connected:', e.data);
+  });
 
   eventSource.addEventListener('inspection-update', (e) => {
     try {
@@ -60,7 +64,10 @@ export function connectSSE(onMessage, onError) {
   });
 
   eventSource.onerror = (err) => {
-    console.error('SSE connection error:', err);
+    console.error('SSE error:', err);
+    if (eventSource.readyState === EventSource.CLOSED) {
+      console.log('SSE connection closed, attempting reconnect...');
+    }
     if (onError) onError(err);
   };
 
