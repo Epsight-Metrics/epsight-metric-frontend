@@ -52,7 +52,7 @@
   let eventSource = null;
   let detections = $state({ objects: [], results: [], timestamp: null });
   let detectionInterval = null;
-  let videoStreamSize = $state({ width: 1920, height: 1080 }); // Default size
+  let videoStreamSize = $state({ width: 640, height: 480 }); // Default size
 
   // CV Stream URL
   if (!import.meta.env.VITE_CV_STREAM_URL) {
@@ -82,12 +82,13 @@
   async function fetchDetections() {
     try {
       const CV_API_URL =
-        import.meta.env.VITE_CV_API_URL || "http://localhost:8000";
+        import.meta.env.VITE_CV_API_URL || "https://epsight-metric-mainprogram-production.up.railway.app";
       const res = await fetch(`${CV_API_URL}/detections`);
       if (res.ok) {
         const data = await res.json();
         if (data.timestamp) {
           detections = data;
+          console.log('[DEBUG] Detections received:', data.objects?.length || 0, 'objects');
         }
       }
     } catch (err) {
@@ -1004,8 +1005,96 @@
                     e.target.nextElementSibling.querySelector(
                       ".error-text",
                     ).style.display = "none";
+                    videoStreamSize = { width: e.target.naturalWidth || 640, height: e.target.naturalHeight || 480 };
                   }}
                 />
+                
+                <!-- Bounding Box Overlay for IP Camera -->
+                {#if detections.objects && detections.objects.length > 0}
+                  <svg class="bbox-overlay" viewBox="0 0 {videoStreamSize.width} {videoStreamSize.height}" preserveAspectRatio="none">
+                    {#each detections.objects as obj, i}
+                      {@const result = detections.results[i]}
+                      {@const status = result?.status || 'NO REF'}
+                      {@const matchedRef = result?.matched_ref || null}
+                      {@const color = status === 'GOOD' ? '#32DC32' : status === 'NO GOOD' ? '#DC2828' : '#FFA500'}
+                      {@const yellowColor = '#00D2FF'}
+                      {@const purpleColor = '#C832C8'}
+                      
+                      {#if obj.shape === 'circle'}
+                        <circle cx={obj.center[0]} cy={obj.center[1]} r={obj.radius_px} fill="none" stroke={color} stroke-width="2" opacity="0.9" />
+                        {@const cx = obj.center[0]}
+                        {@const cy = obj.center[1]}
+                        {@const r = obj.radius_px}
+                        {@const offset = 28}
+                        <line x1={cx - r} y1={cy - offset} x2={cx + r} y2={cy - offset} stroke={yellowColor} stroke-width="1" />
+                        <rect x={cx - 30} y={cy - offset - 20} width="60" height="16" fill="#121212" opacity="0.8" rx="2" />
+                        <text x={cx} y={cy - offset - 8} fill={yellowColor} font-size="14" font-weight="bold" text-anchor="middle" font-family="Arial">
+                          Ø{obj.diameter_mm.toFixed(1)}mm
+                        </text>
+                        {@const topY = cy - r - 14}
+                        {@const statusText = matchedRef ? `${status} [${matchedRef}]` : status}
+                        <rect x={obj.bbox[0] - 5} y={topY - 38} width="${statusText.length * 8 + 10}" height="18" fill="#141414" opacity="0.8" rx="2" />
+                        <text x={obj.bbox[0]} y={topY - 24} fill={color} font-size="16" font-weight="bold" font-family="Arial">
+                          {statusText}
+                        </text>
+                      {:else}
+                        {#if obj.rot_box && obj.rot_box.length === 4}
+                          <polygon points="${obj.rot_box.map(p => `${p[0]},${p[1]}`).join(' ')}" fill="none" stroke={color} stroke-width="2" opacity="0.9" />
+                          <!-- Dimension lines: width (kuning) & height (ungu) -->
+                          {@const box = obj.rot_box}
+                          {@const dist = (p1, p2) => Math.sqrt((p2[0]-p1[0])**2 + (p2[1]-p1[1])**2)}
+                          {@const sa = dist(box[0], box[1])}
+                          {@const sb = dist(box[1], box[2])}
+                          {@const [lp1, lp2, sp1, sp2] = sa >= sb ? [box[0], box[1], box[1], box[2]] : [box[1], box[2], box[0], box[1]]}
+                          {@const offset = 28}
+                          {@const dx1 = lp2[0] - lp1[0]}
+                          {@const dy1 = lp2[1] - lp1[1]}
+                          {@const len1 = Math.sqrt(dx1*dx1 + dy1*dy1)}
+                          {@const nx1 = -dy1 / len1 * offset}
+                          {@const ny1 = dx1 / len1 * offset}
+                          {@const op1_1 = [lp1[0] + nx1, lp1[1] + ny1]}
+                          {@const op1_2 = [lp2[0] + nx1, lp2[1] + ny1]}
+                          {@const mid1 = [(op1_1[0] + op1_2[0])/2, (op1_1[1] + op1_2[1])/2]}
+                          <line x1={lp1[0]} y1={lp1[1]} x2={op1_1[0]} y2={op1_1[1]} stroke={yellowColor} stroke-width="1" />
+                          <line x1={lp2[0]} y1={lp2[1]} x2={op1_2[0]} y2={op1_2[1]} stroke={yellowColor} stroke-width="1" />
+                          <line x1={op1_1[0]} y1={op1_1[1]} x2={op1_2[0]} y2={op1_2[1]} stroke={yellowColor} stroke-width="1" />
+                          <rect x={mid1[0] - 30} y={mid1[1] - 18} width="60" height="16" fill="#121212" opacity="0.8" rx="2" />
+                          <text x={mid1[0]} y={mid1[1] - 6} fill={yellowColor} font-size="14" font-weight="bold" text-anchor="middle" font-family="Arial">
+                            {obj.width_mm.toFixed(1)}mm
+                          </text>
+                          {@const dx2 = sp2[0] - sp1[0]}
+                          {@const dy2 = sp2[1] - sp1[1]}
+                          {@const len2 = Math.sqrt(dx2*dx2 + dy2*dy2)}
+                          {@const nx2 = -dy2 / len2 * offset}
+                          {@const ny2 = dx2 / len2 * offset}
+                          {@const op2_1 = [sp1[0] + nx2, sp1[1] + ny2]}
+                          {@const op2_2 = [sp2[0] + nx2, sp2[1] + ny2]}
+                          {@const mid2 = [(op2_1[0] + op2_2[0])/2, (op2_1[1] + op2_2[1])/2]}
+                          <line x1={sp1[0]} y1={sp1[1]} x2={op2_1[0]} y2={op2_1[1]} stroke={purpleColor} stroke-width="1" />
+                          <line x1={sp2[0]} y1={sp2[1]} x2={op2_2[0]} y2={op2_2[1]} stroke={purpleColor} stroke-width="1" />
+                          <line x1={op2_1[0]} y1={op2_1[1]} x2={op2_2[0]} y2={op2_2[1]} stroke={purpleColor} stroke-width="1" />
+                          <rect x={mid2[0] - 30} y={mid2[1] - 18} width="60" height="16" fill="#121212" opacity="0.8" rx="2" />
+                          <text x={mid2[0]} y={mid2[1] - 6} fill={purpleColor} font-size="14" font-weight="bold" text-anchor="middle" font-family="Arial">
+                            {obj.height_mm.toFixed(1)}mm
+                          </text>
+                        {/if}
+                        {@const topY = obj.bbox[1] - 14}
+                        <!-- Object label -->
+                        <rect x={obj.bbox[0] - 5} y={topY - 18} width="180" height="16" fill="#141414" opacity="0.8" rx="2" />
+                        <text x={obj.bbox[0]} y={topY - 6} fill={color} font-size="14" font-weight="bold" font-family="Arial">
+                          #{i+1} {obj.shape.toUpperCase()} {obj.width_mm.toFixed(1)}x{obj.height_mm.toFixed(1)}mm
+                        </text>
+                        <!-- Status label -->
+                        {@const statusText = matchedRef ? `${status}  [dots]` : status}
+                        {@const statusText2 = matchedRef ? `${status}  [${matchedRef}]` : status}
+                        <rect x={obj.bbox[0] - 5} y={topY - 38} width="${statusText2.length * 8 + 10}" height="18" fill="#141414" opacity="0.8" rx="2" />
+                        <text x={obj.bbox[0]} y={topY - 24} fill={color} font-size="16" font-weight="bold" font-family="Arial">
+                          {statusText2}
+                        </text>
+                      {/if}
+                    {/each}
+                  </svg>
+                {/if}
                 <div
                   class="camera-fallback"
                   style="display: flex; pointer-events: none;"
@@ -1039,11 +1128,98 @@
                   style="display: block;"
                   onplaying={(e) => {
                     e.target.style.display = "block";
+                    videoStreamSize = { width: 640, height: 480 };
                   }}
                   onerror={(e) => {
                     e.target.style.display = "none";
                   }}
                 ></video>
+                
+                <!-- Bounding Box Overlay for Webcam -->
+                {#if detections.objects && detections.objects.length > 0}
+                  <svg class="bbox-overlay" viewBox="0 0 {videoStreamSize.width} {videoStreamSize.height}" preserveAspectRatio="none">
+                    {#each detections.objects as obj, i}
+                      {@const result = detections.results[i]}
+                      {@const status = result?.status || 'NO REF'}
+                      {@const matchedRef = result?.matched_ref || null}
+                      {@const color = status === 'GOOD' ? '#32DC32' : status === 'NO GOOD' ? '#DC2828' : '#FFA500'}
+                      {@const yellowColor = '#00D2FF'}
+                      {@const purpleColor = '#C832C8'}
+                      
+                      {#if obj.shape === 'circle'}
+                        <circle cx={obj.center[0]} cy={obj.center[1]} r={obj.radius_px} fill="none" stroke={color} stroke-width="2" opacity="0.9" />
+                        {@const cx = obj.center[0]}
+                        {@const cy = obj.center[1]}
+                        {@const r = obj.radius_px}
+                        {@const offset = 28}
+                        <line x1={cx - r} y1={cy - offset} x2={cx + r} y2={cy - offset} stroke={yellowColor} stroke-width="1" />
+                        <rect x={cx - 30} y={cy - offset - 20} width="60" height="16" fill="#121212" opacity="0.8" rx="2" />
+                        <text x={cx} y={cy - offset - 8} fill={yellowColor} font-size="14" font-weight="bold" text-anchor="middle" font-family="Arial">
+                          Ø{obj.diameter_mm.toFixed(1)}mm
+                        </text>
+                        {@const topY = cy - r - 14}
+                        {@const statusText = matchedRef ? `${status} [${matchedRef}]` : status}
+                        <rect x={obj.bbox[0] - 5} y={topY - 38} width="${statusText.length * 8 + 10}" height="18" fill="#141414" opacity="0.8" rx="2" />
+                        <text x={obj.bbox[0]} y={topY - 24} fill={color} font-size="16" font-weight="bold" font-family="Arial">
+                          {statusText}
+                        </text>
+                      {:else}
+                        {#if obj.rot_box && obj.rot_box.length === 4}
+                          <polygon points="${obj.rot_box.map(p => `${p[0]},${p[1]}`).join(' ')}" fill="none" stroke={color} stroke-width="2" opacity="0.9" />
+                          <!-- Dimension lines: width (kuning) & height (ungu) -->
+                          {@const box = obj.rot_box}
+                          {@const dist = (p1, p2) => Math.sqrt((p2[0]-p1[0])**2 + (p2[1]-p1[1])**2)}
+                          {@const sa = dist(box[0], box[1])}
+                          {@const sb = dist(box[1], box[2])}
+                          {@const [lp1, lp2, sp1, sp2] = sa >= sb ? [box[0], box[1], box[1], box[2]] : [box[1], box[2], box[0], box[1]]}
+                          {@const offset = 28}
+                          {@const dx1 = lp2[0] - lp1[0]}
+                          {@const dy1 = lp2[1] - lp1[1]}
+                          {@const len1 = Math.sqrt(dx1*dx1 + dy1*dy1)}
+                          {@const nx1 = -dy1 / len1 * offset}
+                          {@const ny1 = dx1 / len1 * offset}
+                          {@const op1_1 = [lp1[0] + nx1, lp1[1] + ny1]}
+                          {@const op1_2 = [lp2[0] + nx1, lp2[1] + ny1]}
+                          {@const mid1 = [(op1_1[0] + op1_2[0])/2, (op1_1[1] + op1_2[1])/2]}
+                          <line x1={lp1[0]} y1={lp1[1]} x2={op1_1[0]} y2={op1_1[1]} stroke={yellowColor} stroke-width="1" />
+                          <line x1={lp2[0]} y1={lp2[1]} x2={op1_2[0]} y2={op1_2[1]} stroke={yellowColor} stroke-width="1" />
+                          <line x1={op1_1[0]} y1={op1_1[1]} x2={op1_2[0]} y2={op1_2[1]} stroke={yellowColor} stroke-width="1" />
+                          <rect x={mid1[0] - 30} y={mid1[1] - 18} width="60" height="16" fill="#121212" opacity="0.8" rx="2" />
+                          <text x={mid1[0]} y={mid1[1] - 6} fill={yellowColor} font-size="14" font-weight="bold" text-anchor="middle" font-family="Arial">
+                            {obj.width_mm.toFixed(1)}mm
+                          </text>
+                          {@const dx2 = sp2[0] - sp1[0]}
+                          {@const dy2 = sp2[1] - sp1[1]}
+                          {@const len2 = Math.sqrt(dx2*dx2 + dy2*dy2)}
+                          {@const nx2 = -dy2 / len2 * offset}
+                          {@const ny2 = dx2 / len2 * offset}
+                          {@const op2_1 = [sp1[0] + nx2, sp1[1] + ny2]}
+                          {@const op2_2 = [sp2[0] + nx2, sp2[1] + ny2]}
+                          {@const mid2 = [(op2_1[0] + op2_2[0])/2, (op2_1[1] + op2_2[1])/2]}
+                          <line x1={sp1[0]} y1={sp1[1]} x2={op2_1[0]} y2={op2_1[1]} stroke={purpleColor} stroke-width="1" />
+                          <line x1={sp2[0]} y1={sp2[1]} x2={op2_2[0]} y2={op2_2[1]} stroke={purpleColor} stroke-width="1" />
+                          <line x1={op2_1[0]} y1={op2_1[1]} x2={op2_2[0]} y2={op2_2[1]} stroke={purpleColor} stroke-width="1" />
+                          <rect x={mid2[0] - 30} y={mid2[1] - 18} width="60" height="16" fill="#121212" opacity="0.8" rx="2" />
+                          <text x={mid2[0]} y={mid2[1] - 6} fill={purpleColor} font-size="14" font-weight="bold" text-anchor="middle" font-family="Arial">
+                            {obj.height_mm.toFixed(1)}mm
+                          </text>
+                        {/if}
+                        {@const topY = obj.bbox[1] - 14}
+                        <!-- Object label -->
+                        <rect x={obj.bbox[0] - 5} y={topY - 18} width="180" height="16" fill="#141414" opacity="0.8" rx="2" />
+                        <text x={obj.bbox[0]} y={topY - 6} fill={color} font-size="14" font-weight="bold" font-family="Arial">
+                          #{i+1} {obj.shape.toUpperCase()} {obj.width_mm.toFixed(1)}x{obj.height_mm.toFixed(1)}mm
+                        </text>
+                        <!-- Status label -->
+                        {@const statusText = matchedRef ? `${status}  [${matchedRef}]` : status}
+                        <rect x={obj.bbox[0] - 5} y={topY - 38} width="${statusText.length * 8 + 10}" height="18" fill="#141414" opacity="0.8" rx="2" />
+                        <text x={obj.bbox[0]} y={topY - 24} fill={color} font-size="16" font-weight="bold" font-family="Arial">
+                          {statusText}
+                        </text>
+                      {/if}
+                    {/each}
+                  </svg>
+                {/if}
                 <div
                   class="camera-fallback"
                   style="display: flex; pointer-events: none;"
