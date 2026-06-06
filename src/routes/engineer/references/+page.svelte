@@ -1,4 +1,4 @@
-<script>
+﻿<script>
   import { onMount, onDestroy } from "svelte";
   import {
     getReferences,
@@ -343,7 +343,7 @@
         <div class="stream-preview">
           <div class="stream-container">
             <img
-              src="http://localhost:5000/video_feed"
+              src={import.meta.env.VITE_CV_STREAM_URL || "http://localhost:5000/video_feed"}
               alt="CV Stream"
               class="stream-video"
               onerror={(e) => {
