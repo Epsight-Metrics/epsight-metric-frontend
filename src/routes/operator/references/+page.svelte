@@ -1,4 +1,4 @@
-<script>
+﻿<script>
   import { onMount, onDestroy } from "svelte";
   import {
     getReferences,
@@ -41,7 +41,7 @@
   let referenceName = $state("");
   let uploadProgress = $state("");
   let useStream = $state(false);
-  const CV_STREAM_URL = import.meta.env.VITE_CV_STREAM_URL || "http://localhost:8000/video_feed";
+  const CV_STREAM_URL = import.meta.env.VITE_CV_STREAM_URL || "http://localhost:5000/video_feed";
 
   // Modal camera state variables
   let videoElementModal = $state(null);
@@ -361,7 +361,7 @@
   }
 </script>
 
-<svelte:head><title>Reference Management — EPSON QC</title></svelte:head>
+<svelte:head><title>Reference Management â€” EPSON QC</title></svelte:head>
 
 <div class="page animate-fade-in">
   <!-- PAGE HEADER -->
@@ -500,7 +500,7 @@
                 <div class="ref-row">
                   <span class="ref-label">Tolerance:</span>
                   <span class="ref-value mono-tol"
-                    >±{ref.toleranceMm.toFixed(2)} mm</span
+                    >Â±{ref.toleranceMm.toFixed(2)} mm</span
                   >
                 </div>
 
@@ -517,7 +517,7 @@
                         "id-ID",
                       )}</span
                     >
-                    <span class="divider-dot">•</span>
+                    <span class="divider-dot">â€¢</span>
                     <Clock size={12} class="mr-1 text-dim" />
                     <span class="time-val"
                       >{new Date(ref.createdAt).toLocaleTimeString("id-ID", {
@@ -1287,3 +1287,4 @@
     }
   }
 </style>
+

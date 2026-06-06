@@ -1,4 +1,4 @@
-<script>
+﻿<script>
   import { t } from '$lib/i18n.js';
   import { Scan, AlertTriangle, Volume2, ClipboardList, CheckCircle, XCircle, CircleDot, Circle, Check, Monitor, Smartphone, Database } from '@lucide/svelte';
   import { onMount, onDestroy } from 'svelte';
@@ -98,10 +98,7 @@
 
       parts = partsData || [];
       references = refsData?.references || [];
-      if (references.length > 0) selectedRefName = references[0].name;
-      if (parts.length > 0 && !selectedPartId) {
-        selectedPartId = parts[0].id;
-      }
+      
 
       activeSession = sessionData.activeSession || null;
       const initialInspections = (sessionData.recent || []).map(mapInspection);
@@ -216,6 +213,10 @@
   }
 
   async function handleStartSession() {
+    if (!selectedPartId || !selectedRefName) {
+      error = "Silakan pilih Part dan Referensi terlebih dahulu sebelum memulai sesi.";
+      return;
+    }
     sessionLoading = true;
     error = '';
     try {
@@ -235,6 +236,8 @@
     try {
       await stopSession(activeSession.sessionId);
       activeSession = null;
+      selectedPartId = null;
+      selectedRefName = "";
     } catch (err) {
       error = err.message;
     } finally {
@@ -449,60 +452,88 @@
     return p?.partCode || '-';
   }
 
-  // Online detection functions - send frames to CV API for real-time bounding box
-  async function sendFrameToCV() {
-    if (inspectionMode !== 'online' || capturedImage) return;
-    
-    const sourceElement = useIpCamera ? imgElement : videoElement;
-    if (!sourceElement) return;
-    
-    try {
-      // Create canvas and capture frame
-      const canvas = document.createElement('canvas');
-      canvas.width = 640; // Smaller resolution for faster processing
-      canvas.height = 480;
-      const ctx = canvas.getContext('2d');
-      
-      const width = sourceElement.videoWidth || sourceElement.naturalWidth || canvas.width;
-      const height = sourceElement.videoHeight || sourceElement.naturalHeight || canvas.height;
-      
-      ctx.drawImage(sourceElement, 0, 0, width, height, 0, 0, canvas.width, canvas.height);
-      
-      // Convert to blob
-      const blob = await new Promise(resolve => 
-        canvas.toBlob(resolve, 'image/jpeg', 0.6) // Lower quality for speed
-      );
-      
-      // Send to CV API /update-frame endpoint
-      const formData = new FormData();
-      formData.append('file', blob, 'frame.jpg');
-      
-      const CV_API_URL = import.meta.env.VITE_CV_API_URL || 'https://epsight-metric-mainprogram-production.up.railway.app';
-      await fetch(`${CV_API_URL}/update-frame`, {
-        method: 'POST',
-        body: formData
-      });
-      
-    } catch (err) {
-      // Silent fail - don't disrupt user experience
-      console.log('[Online Detection] Failed to send frame:', err.message);
+    // Online detection functions - kirim frame ke CV API, baca deteksi dari response langsung
+    // Stateless: setiap request self-contained - bekerja sempurna di cloud (Railway multi-instance)
+    let isSendingFrame = false; // Cegah pengiriman yang overlap
+    async function sendFrameToCV() {
+      if (inspectionMode !== 'online' || capturedImage) return;
+      if (isSendingFrame) return;
+
+      const sourceElement = useIpCamera ? imgElement : videoElement;
+      if (!sourceElement) return;
+
+      // Validasi source element sudah siap
+      const isVideoReady = !useIpCamera && (sourceElement.readyState >= 2) && sourceElement.videoWidth > 0;
+      const isImgReady   = useIpCamera  && sourceElement.complete && sourceElement.naturalWidth > 0;
+      if (!isVideoReady && !isImgReady) return;
+
+      isSendingFrame = true;
+      try {
+        // Capture frame 640x480 untuk performa optimal
+        const canvas = document.createElement('canvas');
+        canvas.width  = 640;
+        canvas.height = 480;
+        const ctx = canvas.getContext('2d');
+
+        const srcW = sourceElement.videoWidth  || sourceElement.naturalWidth  || 640;
+        const srcH = sourceElement.videoHeight || sourceElement.naturalHeight || 480;
+        ctx.drawImage(sourceElement, 0, 0, srcW, srcH, 0, 0, 640, 480);
+
+        const blob = await new Promise(resolve =>
+          canvas.toBlob(resolve, 'image/jpeg', 0.65)
+        );
+        if (!blob) return;
+
+        const formData = new FormData();
+        formData.append('file', blob, 'frame.jpg');
+
+        const CV_API_URL = import.meta.env.VITE_CV_API_URL || 'http://localhost:8000';
+
+        // ✅ STATELESS: baca hasil deteksi langsung dari response
+        // Tidak perlu polling /detections terpisah - bekerja di cloud maupun lokal
+        const res = await fetch(`${CV_API_URL}/update-frame`, {
+          method: 'POST',
+          body: formData,
+          signal: AbortSignal.timeout(2500)
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          // Update detections langsung dari response - tidak ada state di server
+          if (data.timestamp && Array.isArray(data.objects)) {
+            detections = {
+              objects:   data.objects,
+              results:   data.results || [],
+              timestamp: data.timestamp
+            };
+          }
+        }
+
+      } catch (err) {
+        if (err.name !== 'TimeoutError' && err.name !== 'AbortError') {
+          console.log('[Online Detection] Error:', err.message);
+        }
+      } finally {
+        isSendingFrame = false;
+      }
     }
-  }
-  
-  function startOnlineDetection() {
-    if (onlineDetectionInterval) return;
-    // Send frame every 1 second (adjust for performance)
-    onlineDetectionInterval = setInterval(sendFrameToCV, 1000);
-    console.log('[Online Detection] Started');
-  }
-  
-  function stopOnlineDetection() {
-    if (onlineDetectionInterval) {
-      clearInterval(onlineDetectionInterval);
-      onlineDetectionInterval = null;
-      console.log('[Online Detection] Stopped');
+
+    function startOnlineDetection() {
+      if (onlineDetectionInterval) return;
+      onlineDetectionInterval = setInterval(sendFrameToCV, 500);
+      console.log('[Online Detection] Started (stateless mode)');
     }
-  }
+
+    function stopOnlineDetection() {
+      if (onlineDetectionInterval) {
+        clearInterval(onlineDetectionInterval);
+        onlineDetectionInterval = null;
+        isSendingFrame = false;
+        // Reset detections saat mode online dimatikan
+        if (inspectionMode !== 'online') detections = { objects: [], results: [], timestamp: null };
+        console.log('[Online Detection] Stopped');
+      }
+    }
 
   onMount(() => {
     loadInitialData();
@@ -749,23 +780,47 @@
       </div>
       <div class="part-selector">
         <label class="label" for="partSelect">{$t('operator.select_part')}</label>
-        <select id="partSelect" class="select" bind:value={selectedPartId}>
+        <select id="partSelect" class="select" bind:value={selectedPartId}><option value={null} disabled selected>— Pilih Part —</option>
           {#each parts as part}
             <option value={part.id}>{part.partCode} — {part.partName}</option>
           {/each}
         </select>
+      
+        {#if selectedPartId}
+          {@const selectedPart = parts.find(p => p.id === selectedPartId)}
+          {#if selectedPart}
+            <div class="selector-meta-info" style="font-size: 0.75rem; color: #7c8ba1; margin-top: 4px;">
+              Vendor: <strong>{selectedPart.vendorName}</strong>
+            </div>
+          {/if}
+        {/if}
       </div>
       <div class="part-selector">
         <label class="label" for="refSelect">Referensi</label>
-        <select id="refSelect" class="select" bind:value={selectedRefName}>
+        <select id="refSelect" class="select" bind:value={selectedRefName}><option value="" disabled selected>— Pilih Referensi —</option>
           {#if references.length === 0}
-            <option value="">— Belum ada referensi —</option>
+            <option value="" disabled>— Belum ada referensi —</option>
           {:else}
             {#each references as ref}
               <option value={ref.name}>{ref.name} ({ref.shape})</option>
             {/each}
           {/if}
         </select>
+      
+        {#if selectedRefName}
+          {@const selectedRef = references.find(r => r.name === selectedRefName)}
+          {#if selectedRef}
+            <div class="selector-meta-info" style="font-size: 0.75rem; color: #7c8ba1; margin-top: 4px; display: flex; gap: 8px;">
+              <span>Shape: <strong>{selectedRef.shape}</strong></span>
+              <span>•</span>
+              {#if selectedRef.shape === 'circle'}
+                <span>Diameter: <strong>{selectedRef.diameterMm} mm</strong></span>
+              {:else}
+                <span>W/H: <strong>{selectedRef.widthMm}x{selectedRef.heightMm} mm</strong></span>
+              {/if}
+            </div>
+          {/if}
+        {/if}
       </div>
     </div>
 
@@ -1015,7 +1070,7 @@
                         {@const result = detections.results[i]}
                         {@const status = result?.status || 'NO REF'}
                         {@const matchedRef = result?.matched_ref || null}
-                        {@const color = status === 'GOOD' ? '#32DC32' : status === 'NO GOOD' ? '#2828DC' : '#FFA500'}
+                        {@const color = status === 'GOOD' ? '#32DC32' : status === 'NO GOOD' ? '#DC2828' : '#FFA500'}
                         {@const yellowColor = '#00D2FF'}
                         {@const purpleColor = '#C832C8'}
                         
@@ -1039,17 +1094,57 @@
                         {:else}
                           {#if obj.rot_box && obj.rot_box.length === 4}
                             <polygon points="{obj.rot_box.map(p => `${p[0]},${p[1]}`).join(' ')}" fill="none" stroke={color} stroke-width="2" opacity="0.9" />
-                            {@const topY = obj.bbox[1] - 14}
-                            <rect x={obj.bbox[0] - 5} y={topY - 18} width="180" height="16" fill="#141414" opacity="0.8" rx="2" />
-                            <text x={obj.bbox[0]} y={topY - 6} fill={color} font-size="14" font-weight="bold" font-family="Arial">
-                              {obj.width_mm.toFixed(1)}×{obj.height_mm.toFixed(1)}mm
+                            <!-- Dimension lines: width (kuning) & height (ungu) -->
+                            {@const box = obj.rot_box}
+                            {@const dist = (p1, p2) => Math.sqrt((p2[0]-p1[0])**2 + (p2[1]-p1[1])**2)}
+                            {@const sa = dist(box[0], box[1])}
+                            {@const sb = dist(box[1], box[2])}
+                            {@const [lp1, lp2, sp1, sp2] = sa >= sb ? [box[0], box[1], box[1], box[2]] : [box[1], box[2], box[0], box[1]]}
+                            {@const offset = 28}
+                            {@const dx1 = lp2[0] - lp1[0]}
+                            {@const dy1 = lp2[1] - lp1[1]}
+                            {@const len1 = Math.sqrt(dx1*dx1 + dy1*dy1)}
+                            {@const nx1 = -dy1 / len1 * offset}
+                            {@const ny1 = dx1 / len1 * offset}
+                            {@const op1_1 = [lp1[0] + nx1, lp1[1] + ny1]}
+                            {@const op1_2 = [lp2[0] + nx1, lp2[1] + ny1]}
+                            {@const mid1 = [(op1_1[0] + op1_2[0])/2, (op1_1[1] + op1_2[1])/2]}
+                            <line x1={lp1[0]} y1={lp1[1]} x2={op1_1[0]} y2={op1_1[1]} stroke={yellowColor} stroke-width="1" />
+                            <line x1={lp2[0]} y1={lp2[1]} x2={op1_2[0]} y2={op1_2[1]} stroke={yellowColor} stroke-width="1" />
+                            <line x1={op1_1[0]} y1={op1_1[1]} x2={op1_2[0]} y2={op1_2[1]} stroke={yellowColor} stroke-width="1" />
+                            <rect x={mid1[0] - 30} y={mid1[1] - 18} width="60" height="16" fill="#121212" opacity="0.8" rx="2" />
+                            <text x={mid1[0]} y={mid1[1] - 6} fill={yellowColor} font-size="14" font-weight="bold" text-anchor="middle" font-family="Arial">
+                              {obj.width_mm.toFixed(1)}mm
                             </text>
-                            {@const statusText = matchedRef ? `${status} [${matchedRef}]` : status}
-                            <rect x={obj.bbox[0] - 5} y={topY - 38} width="{statusText.length * 8 + 10}" height="18" fill="#141414" opacity="0.8" rx="2" />
-                            <text x={obj.bbox[0]} y={topY - 24} fill={color} font-size="16" font-weight="bold" font-family="Arial">
-                              {statusText}
+                            {@const dx2 = sp2[0] - sp1[0]}
+                            {@const dy2 = sp2[1] - sp1[1]}
+                            {@const len2 = Math.sqrt(dx2*dx2 + dy2*dy2)}
+                            {@const nx2 = -dy2 / len2 * offset}
+                            {@const ny2 = dx2 / len2 * offset}
+                            {@const op2_1 = [sp1[0] + nx2, sp1[1] + ny2]}
+                            {@const op2_2 = [sp2[0] + nx2, sp2[1] + ny2]}
+                            {@const mid2 = [(op2_1[0] + op2_2[0])/2, (op2_1[1] + op2_2[1])/2]}
+                            <line x1={sp1[0]} y1={sp1[1]} x2={op2_1[0]} y2={op2_1[1]} stroke={purpleColor} stroke-width="1" />
+                            <line x1={sp2[0]} y1={sp2[1]} x2={op2_2[0]} y2={op2_2[1]} stroke={purpleColor} stroke-width="1" />
+                            <line x1={op2_1[0]} y1={op2_1[1]} x2={op2_2[0]} y2={op2_2[1]} stroke={purpleColor} stroke-width="1" />
+                            <rect x={mid2[0] - 30} y={mid2[1] - 18} width="60" height="16" fill="#121212" opacity="0.8" rx="2" />
+                            <text x={mid2[0]} y={mid2[1] - 6} fill={purpleColor} font-size="14" font-weight="bold" text-anchor="middle" font-family="Arial">
+                              {obj.height_mm.toFixed(1)}mm
                             </text>
                           {/if}
+                          {@const topY = obj.bbox[1] - 14}
+                          <!-- Object label -->
+                          <rect x={obj.bbox[0] - 5} y={topY - 18} width="180" height="16" fill="#141414" opacity="0.8" rx="2" />
+                          <text x={obj.bbox[0]} y={topY - 6} fill={color} font-size="14" font-weight="bold" font-family="Arial">
+                            #{i+1} {obj.shape.toUpperCase()} {obj.width_mm.toFixed(1)}x{obj.height_mm.toFixed(1)}mm
+                          </text>
+                          <!-- Status label -->
+                          {@const statusText = matchedRef ? `${status}  [${matchedRef}]` : status}
+                          <rect x={obj.bbox[0] - 5} y={topY - 38} width="{statusText.length * 8 + 10}" height="18" fill="#141414" opacity="0.8" rx="2" />
+                          <text x={obj.bbox[0]} y={topY - 24} fill={color} font-size="16" font-weight="bold" font-family="Arial">
+                            {statusText}
+                          </text>
+                        {/if}
                         {/if}
                       {/each}
                     </svg>
@@ -1080,10 +1175,8 @@
                     style="display: block;"
                     onplaying={(e) => { 
                       e.target.style.display='block';
-                      // Update video stream size for bounding box overlay
-                      if (e.target.videoWidth && e.target.videoHeight) {
-                        videoStreamSize = { width: e.target.videoWidth, height: e.target.videoHeight };
-                      }
+                      // Frame yg dikirim ke CV API = 640x480, koordinat bbox juga 640x480
+                      videoStreamSize = { width: 640, height: 480 };
                     }}
                     onerror={(e) => { e.target.style.display='none'; }}
                   ></video>
@@ -1095,7 +1188,7 @@
                         {@const result = detections.results[i]}
                         {@const status = result?.status || 'NO REF'}
                         {@const matchedRef = result?.matched_ref || null}
-                        {@const color = status === 'GOOD' ? '#32DC32' : status === 'NO GOOD' ? '#2828DC' : '#FFA500'}
+                        {@const color = status === 'GOOD' ? '#32DC32' : status === 'NO GOOD' ? '#DC2828' : '#FFA500'}
                         {@const yellowColor = '#00D2FF'}
                         {@const purpleColor = '#C832C8'}
                         
@@ -1119,17 +1212,57 @@
                         {:else}
                           {#if obj.rot_box && obj.rot_box.length === 4}
                             <polygon points="{obj.rot_box.map(p => `${p[0]},${p[1]}`).join(' ')}" fill="none" stroke={color} stroke-width="2" opacity="0.9" />
-                            {@const topY = obj.bbox[1] - 14}
-                            <rect x={obj.bbox[0] - 5} y={topY - 18} width="180" height="16" fill="#141414" opacity="0.8" rx="2" />
-                            <text x={obj.bbox[0]} y={topY - 6} fill={color} font-size="14" font-weight="bold" font-family="Arial">
-                              {obj.width_mm.toFixed(1)}×{obj.height_mm.toFixed(1)}mm
+                            <!-- Dimension lines: width (kuning) & height (ungu) -->
+                            {@const box = obj.rot_box}
+                            {@const dist = (p1, p2) => Math.sqrt((p2[0]-p1[0])**2 + (p2[1]-p1[1])**2)}
+                            {@const sa = dist(box[0], box[1])}
+                            {@const sb = dist(box[1], box[2])}
+                            {@const [lp1, lp2, sp1, sp2] = sa >= sb ? [box[0], box[1], box[1], box[2]] : [box[1], box[2], box[0], box[1]]}
+                            {@const offset = 28}
+                            {@const dx1 = lp2[0] - lp1[0]}
+                            {@const dy1 = lp2[1] - lp1[1]}
+                            {@const len1 = Math.sqrt(dx1*dx1 + dy1*dy1)}
+                            {@const nx1 = -dy1 / len1 * offset}
+                            {@const ny1 = dx1 / len1 * offset}
+                            {@const op1_1 = [lp1[0] + nx1, lp1[1] + ny1]}
+                            {@const op1_2 = [lp2[0] + nx1, lp2[1] + ny1]}
+                            {@const mid1 = [(op1_1[0] + op1_2[0])/2, (op1_1[1] + op1_2[1])/2]}
+                            <line x1={lp1[0]} y1={lp1[1]} x2={op1_1[0]} y2={op1_1[1]} stroke={yellowColor} stroke-width="1" />
+                            <line x1={lp2[0]} y1={lp2[1]} x2={op1_2[0]} y2={op1_2[1]} stroke={yellowColor} stroke-width="1" />
+                            <line x1={op1_1[0]} y1={op1_1[1]} x2={op1_2[0]} y2={op1_2[1]} stroke={yellowColor} stroke-width="1" />
+                            <rect x={mid1[0] - 30} y={mid1[1] - 18} width="60" height="16" fill="#121212" opacity="0.8" rx="2" />
+                            <text x={mid1[0]} y={mid1[1] - 6} fill={yellowColor} font-size="14" font-weight="bold" text-anchor="middle" font-family="Arial">
+                              {obj.width_mm.toFixed(1)}mm
                             </text>
-                            {@const statusText = matchedRef ? `${status} [${matchedRef}]` : status}
-                            <rect x={obj.bbox[0] - 5} y={topY - 38} width="{statusText.length * 8 + 10}" height="18" fill="#141414" opacity="0.8" rx="2" />
-                            <text x={obj.bbox[0]} y={topY - 24} fill={color} font-size="16" font-weight="bold" font-family="Arial">
-                              {statusText}
+                            {@const dx2 = sp2[0] - sp1[0]}
+                            {@const dy2 = sp2[1] - sp1[1]}
+                            {@const len2 = Math.sqrt(dx2*dx2 + dy2*dy2)}
+                            {@const nx2 = -dy2 / len2 * offset}
+                            {@const ny2 = dx2 / len2 * offset}
+                            {@const op2_1 = [sp1[0] + nx2, sp1[1] + ny2]}
+                            {@const op2_2 = [sp2[0] + nx2, sp2[1] + ny2]}
+                            {@const mid2 = [(op2_1[0] + op2_2[0])/2, (op2_1[1] + op2_2[1])/2]}
+                            <line x1={sp1[0]} y1={sp1[1]} x2={op2_1[0]} y2={op2_1[1]} stroke={purpleColor} stroke-width="1" />
+                            <line x1={sp2[0]} y1={sp2[1]} x2={op2_2[0]} y2={op2_2[1]} stroke={purpleColor} stroke-width="1" />
+                            <line x1={op2_1[0]} y1={op2_1[1]} x2={op2_2[0]} y2={op2_2[1]} stroke={purpleColor} stroke-width="1" />
+                            <rect x={mid2[0] - 30} y={mid2[1] - 18} width="60" height="16" fill="#121212" opacity="0.8" rx="2" />
+                            <text x={mid2[0]} y={mid2[1] - 6} fill={purpleColor} font-size="14" font-weight="bold" text-anchor="middle" font-family="Arial">
+                              {obj.height_mm.toFixed(1)}mm
                             </text>
                           {/if}
+                          {@const topY = obj.bbox[1] - 14}
+                          <!-- Object label -->
+                          <rect x={obj.bbox[0] - 5} y={topY - 18} width="180" height="16" fill="#141414" opacity="0.8" rx="2" />
+                          <text x={obj.bbox[0]} y={topY - 6} fill={color} font-size="14" font-weight="bold" font-family="Arial">
+                            #{i+1} {obj.shape.toUpperCase()} {obj.width_mm.toFixed(1)}x{obj.height_mm.toFixed(1)}mm
+                          </text>
+                          <!-- Status label -->
+                          {@const statusText = matchedRef ? `${status}  [${matchedRef}]` : status}
+                          <rect x={obj.bbox[0] - 5} y={topY - 38} width="{statusText.length * 8 + 10}" height="18" fill="#141414" opacity="0.8" rx="2" />
+                          <text x={obj.bbox[0]} y={topY - 24} fill={color} font-size="16" font-weight="bold" font-family="Arial">
+                            {statusText}
+                          </text>
+                        {/if}
                         {/if}
                       {/each}
                     </svg>
