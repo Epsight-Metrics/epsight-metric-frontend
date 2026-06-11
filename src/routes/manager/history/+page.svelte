@@ -613,20 +613,7 @@
           </div>
         {/if}
 
-        {#if selectedInspection.imagePath}
-          <div class="detail-section">
-            <h3 class="section-title">Foto Evidence</h3>
-            <img src={selectedInspection.imagePath} alt="Evidence" class="evidence-img" onerror={(e) => e.target.style.display='none'} />
-          </div>
-        {:else}
-          <div class="detail-section">
-            <h3 class="section-title">Foto Evidence</h3>
-            <div class="no-evidence">
-              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.3;"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-              <p>Tidak ada foto evidence</p>
-            </div>
-          </div>
-        {/if}
+
       </div>
     </div>
   </div>
@@ -867,7 +854,5 @@
   .section-title { font-size: var(--fs-md); font-weight: var(--fw-semibold); margin-bottom: var(--sp-3); color: var(--clr-text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
   .detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-3); font-size: var(--fs-sm); }
   .detail-grid .label { color: var(--clr-text-muted); font-weight: var(--fw-medium); }
-  .evidence-img { width: 100%; max-width: 500px; border-radius: var(--radius-lg); border: 1px solid var(--clr-border); }
-  .no-evidence { text-align: center; padding: var(--sp-8); color: var(--clr-text-dim); background: var(--clr-surface-2); border-radius: var(--radius-lg); }
-  .no-evidence p { margin-top: var(--sp-2); font-size: var(--fs-sm); }
+
 </style>
