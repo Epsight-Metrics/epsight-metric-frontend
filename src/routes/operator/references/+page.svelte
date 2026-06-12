@@ -47,6 +47,7 @@
   let manualShape = $state("rectangle");
   let manualWidth = $state("13.29");
   let manualHeight = $state("6.29");
+  let manualDiameter = $state("10.00");
   let manualTolerance = $state("1.00");
   let manualVertices = $state("4");
   const CV_STREAM_URL = import.meta.env.VITE_CV_STREAM_URL || "http://localhost:5000/video_feed";
@@ -350,13 +351,24 @@
       return;
     }
 
+    const diameter = parseFloat(manualDiameter);
     const width = parseFloat(manualWidth);
     const height = parseFloat(manualHeight);
     const tolerance = parseFloat(manualTolerance);
     const vertices = parseInt(manualVertices);
 
-    if (isNaN(width) || isNaN(height) || isNaN(tolerance) || isNaN(vertices)) {
-      error = "Please provide valid numeric values";
+    if (manualShape === "circle" && isNaN(diameter)) {
+      error = "Please provide valid diameter for circle";
+      return;
+    }
+
+    if (manualShape !== "circle" && (isNaN(width) || isNaN(height))) {
+      error = "Please provide valid width and height";
+      return;
+    }
+
+    if (isNaN(tolerance) || isNaN(vertices)) {
+      error = "Please provide valid tolerance and vertices";
       return;
     }
 
@@ -369,13 +381,14 @@
         name: referenceName.trim(),
         shape: manualShape,
         vertices: vertices,
-        diameterMm: manualShape === "circle" ? width : null,
+        diameterMm: manualShape === "circle" ? diameter : null,
         widthMm: manualShape !== "circle" ? width : null,
         heightMm: manualShape !== "circle" ? height : null,
         toleranceMm: tolerance,
       });
 
       referenceName = "";
+      manualDiameter = "10.00";
       manualWidth = "13.29";
       manualHeight = "6.29";
       manualTolerance = "1.00";
@@ -697,7 +710,20 @@
               </select>
             </div>
 
-            {#if manualShape === "rectangle" || manualShape === "polygon"}
+            {#if manualShape === "circle"}
+              <div class="form-group">
+                <label class="label" for="manualDiameter">Diameter (mm)</label>
+                <input
+                  class="input"
+                  id="manualDiameter"
+                  type="number"
+                  step="0.01"
+                  placeholder="10.00"
+                  bind:value={manualDiameter}
+                  disabled={saving}
+                />
+              </div>
+            {:else}
               <div class="form-row">
                 <div class="form-group">
                   <label class="label" for="manualWidth">Width (mm)</label>
