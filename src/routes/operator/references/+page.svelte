@@ -357,16 +357,6 @@
     const tolerance = parseFloat(manualTolerance);
     const vertices = parseInt(manualVertices);
 
-    if (manualShape === "circle" && isNaN(diameter)) {
-      error = "Please provide valid diameter for circle";
-      return;
-    }
-
-    if (manualShape !== "circle" && (isNaN(width) || isNaN(height))) {
-      error = "Please provide valid width and height";
-      return;
-    }
-
     if (isNaN(tolerance) || isNaN(vertices)) {
       error = "Please provide valid tolerance and vertices";
       return;
@@ -377,15 +367,19 @@
     uploadProgress = "Saving...";
 
     try {
-      await saveReference({
+      const payload = {
         name: referenceName.trim(),
         shape: manualShape,
         vertices: vertices,
-        diameterMm: manualShape === "circle" ? diameter : null,
-        widthMm: manualShape !== "circle" ? width : null,
-        heightMm: manualShape !== "circle" ? height : null,
         toleranceMm: tolerance,
-      });
+        diameterMm: manualShape === "circle" ? diameter : 0,
+        widthMm: manualShape !== "circle" ? width : 0,
+        heightMm: manualShape !== "circle" ? height : 0,
+      };
+
+      console.log("Final payload being sent:", JSON.stringify(payload, null, 2));
+      
+      await saveReference(payload);
 
       referenceName = "";
       manualDiameter = "10.00";
@@ -396,12 +390,13 @@
       uploadProgress = "";
       showAddForm = false;
 
-      success = `Reference "${referenceName.trim()}" saved!`;
+      success = `Reference saved successfully!`;
       setTimeout(() => (success = ""), 3000);
 
       await loadReferences();
     } catch (err) {
-      error = err.message;
+      console.error("Save manual reference error:", err);
+      error = err.message || "Failed to save reference";
       uploadProgress = "";
     } finally {
       saving = false;
@@ -710,7 +705,7 @@
               </select>
             </div>
 
-            {#if manualShape === "circle"}
+            <div class="form-row">
               <div class="form-group">
                 <label class="label" for="manualDiameter">Diameter (mm)</label>
                 <input
@@ -720,39 +715,36 @@
                   step="0.01"
                   placeholder="10.00"
                   bind:value={manualDiameter}
-                  disabled={saving}
+                  disabled={saving || manualShape !== "circle"}
                 />
               </div>
-            {:else}
-              <div class="form-row">
-                <div class="form-group">
-                  <label class="label" for="manualWidth">Width (mm)</label>
-                  <input
-                    class="input"
-                    id="manualWidth"
-                    type="number"
-                    step="0.01"
-                    placeholder="13.29"
-                    bind:value={manualWidth}
-                    disabled={saving}
-                  />
-                </div>
-                <div class="form-group">
-                  <label class="label" for="manualHeight">Height (mm)</label>
-                  <input
-                    class="input"
-                    id="manualHeight"
-                    type="number"
-                    step="0.01"
-                    placeholder="6.29"
-                    bind:value={manualHeight}
-                    disabled={saving}
-                  />
-                </div>
+              <div class="form-group">
+                <label class="label" for="manualWidth">Width (mm)</label>
+                <input
+                  class="input"
+                  id="manualWidth"
+                  type="number"
+                  step="0.01"
+                  placeholder="13.29"
+                  bind:value={manualWidth}
+                  disabled={saving || manualShape === "circle"}
+                />
               </div>
-            {/if}
+            </div>
 
             <div class="form-row">
+              <div class="form-group">
+                <label class="label" for="manualHeight">Height (mm)</label>
+                <input
+                  class="input"
+                  id="manualHeight"
+                  type="number"
+                  step="0.01"
+                  placeholder="6.29"
+                  bind:value={manualHeight}
+                  disabled={saving || manualShape === "circle"}
+                />
+              </div>
               <div class="form-group">
                 <label class="label" for="manualTolerance">Tolerance (±mm)</label>
                 <input
@@ -765,17 +757,18 @@
                   disabled={saving}
                 />
               </div>
-              <div class="form-group">
-                <label class="label" for="manualVertices">Vertices</label>
-                <input
-                  class="input"
-                  id="manualVertices"
-                  type="number"
-                  placeholder="4"
-                  bind:value={manualVertices}
-                  disabled={saving}
-                />
-              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="label" for="manualVertices">Vertices</label>
+              <input
+                class="input"
+                id="manualVertices"
+                type="number"
+                placeholder="4"
+                bind:value={manualVertices}
+                disabled={saving}
+              />
             </div>
           </div>
         {:else if !useStream}
