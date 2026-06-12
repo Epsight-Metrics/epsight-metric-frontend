@@ -41,6 +41,14 @@
   let referenceName = $state("");
   let uploadProgress = $state("");
   let useStream = $state(false);
+  let useManualInput = $state(false);
+
+  // Manual input fields
+  let manualShape = $state("rectangle");
+  let manualWidth = $state("13.29");
+  let manualHeight = $state("6.29");
+  let manualTolerance = $state("1.00");
+  let manualVertices = $state("4");
   const CV_STREAM_URL = import.meta.env.VITE_CV_STREAM_URL || "http://localhost:5000/video_feed";
 
   // Modal camera state variables
@@ -336,6 +344,57 @@
     }
   }
 
+  async function handleSaveManual() {
+    if (!referenceName.trim()) {
+      error = "Please provide reference name";
+      return;
+    }
+
+    const width = parseFloat(manualWidth);
+    const height = parseFloat(manualHeight);
+    const tolerance = parseFloat(manualTolerance);
+    const vertices = parseInt(manualVertices);
+
+    if (isNaN(width) || isNaN(height) || isNaN(tolerance) || isNaN(vertices)) {
+      error = "Please provide valid numeric values";
+      return;
+    }
+
+    saving = true;
+    error = "";
+    uploadProgress = "Saving...";
+
+    try {
+      await saveReference({
+        name: referenceName.trim(),
+        shape: manualShape,
+        vertices: vertices,
+        diameterMm: manualShape === "circle" ? width : null,
+        widthMm: manualShape !== "circle" ? width : null,
+        heightMm: manualShape !== "circle" ? height : null,
+        toleranceMm: tolerance,
+      });
+
+      referenceName = "";
+      manualWidth = "13.29";
+      manualHeight = "6.29";
+      manualTolerance = "1.00";
+      manualVertices = "4";
+      uploadProgress = "";
+      showAddForm = false;
+
+      success = `Reference "${referenceName.trim()}" saved!`;
+      setTimeout(() => (success = ""), 3000);
+
+      await loadReferences();
+    } catch (err) {
+      error = err.message;
+      uploadProgress = "";
+    } finally {
+      saving = false;
+    }
+  }
+
   async function handleDelete(name) {
     if (!confirm(`Delete reference "${name}"?`)) return;
 
@@ -580,13 +639,14 @@
           />
         </div>
 
-        <!-- Toggle between Upload and Stream -->
+        <!-- Toggle between Upload, Stream, and Manual Input -->
         <div class="source-toggle">
           <button
             class="toggle-btn"
-            class:active={!useStream}
+            class:active={!useStream && !useManualInput}
             onclick={() => {
               useStream = false;
+              useManualInput = false;
               imageFile = null;
             }}
             disabled={saving}
@@ -595,18 +655,104 @@
           </button>
           <button
             class="toggle-btn"
-            class:active={useStream}
+            class:active={useStream && !useManualInput}
             onclick={() => {
               useStream = true;
+              useManualInput = false;
               imageFile = null;
             }}
             disabled={saving}
           >
             <Camera size={14} class="mr-2" /> Ambil dari Kamera
           </button>
+          <button
+            class="toggle-btn"
+            class:active={useManualInput}
+            onclick={() => {
+              useManualInput = true;
+              useStream = false;
+              imageFile = null;
+              capturedImageModal = null;
+            }}
+            disabled={saving}
+          >
+            <Plus size={14} class="mr-2" /> Input Manual
+          </button>
         </div>
 
-        {#if !useStream}
+        {#if useManualInput}
+          <!-- Manual Input Form -->
+          <div class="manual-form">
+            <div class="form-group">
+              <label class="label" for="manualShape">Shape</label>
+              <select
+                class="input"
+                id="manualShape"
+                bind:value={manualShape}
+                disabled={saving}
+              >
+                <option value="rectangle">Rectangle</option>
+                <option value="circle">Circle</option>
+                <option value="polygon">Polygon</option>
+              </select>
+            </div>
+
+            {#if manualShape === "rectangle" || manualShape === "polygon"}
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="label" for="manualWidth">Width (mm)</label>
+                  <input
+                    class="input"
+                    id="manualWidth"
+                    type="number"
+                    step="0.01"
+                    placeholder="13.29"
+                    bind:value={manualWidth}
+                    disabled={saving}
+                  />
+                </div>
+                <div class="form-group">
+                  <label class="label" for="manualHeight">Height (mm)</label>
+                  <input
+                    class="input"
+                    id="manualHeight"
+                    type="number"
+                    step="0.01"
+                    placeholder="6.29"
+                    bind:value={manualHeight}
+                    disabled={saving}
+                  />
+                </div>
+              </div>
+            {/if}
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="label" for="manualTolerance">Tolerance (±mm)</label>
+                <input
+                  class="input"
+                  id="manualTolerance"
+                  type="number"
+                  step="0.01"
+                  placeholder="1.00"
+                  bind:value={manualTolerance}
+                  disabled={saving}
+                />
+              </div>
+              <div class="form-group">
+                <label class="label" for="manualVertices">Vertices</label>
+                <input
+                  class="input"
+                  id="manualVertices"
+                  type="number"
+                  placeholder="4"
+                  bind:value={manualVertices}
+                  disabled={saving}
+                />
+              </div>
+            </div>
+          </div>
+        {:else if !useStream}
           <div class="form-group">
             <label class="label" for="refImage">Select Image</label>
             <div class="upload-area">
@@ -753,10 +899,11 @@
       <div class="modal-footer-bar">
         <button
           class="btn btn-primary flex-1 btn-save"
-          onclick={useStream ? handleSaveFromStream : handleSaveFromImage}
+          onclick={useManualInput ? handleSaveManual : (useStream ? handleSaveFromStream : handleSaveFromImage)}
           disabled={saving ||
-            (!useStream && (!imageFile || !referenceName.trim())) ||
-            (useStream && (!referenceName.trim() || !capturedImageModal))}
+            (!useManualInput && !useStream && (!imageFile || !referenceName.trim())) ||
+            (!useManualInput && useStream && (!referenceName.trim() || !capturedImageModal)) ||
+            (useManualInput && !referenceName.trim())}
         >
           {#if saving}
             <span class="spinner"></span> Saving...
@@ -1187,6 +1334,25 @@
     background: var(--clr-accent);
     color: white;
     border-color: var(--clr-accent);
+  }
+
+  /* MANUAL FORM */
+  .manual-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-3);
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
   }
 
   /* FILE UPLOAD COMPACT */
