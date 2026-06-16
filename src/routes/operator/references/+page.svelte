@@ -46,6 +46,11 @@
   let isEditing = $state(false);
   let editingId = $state(null);
 
+  // Delete confirmation modal state
+  let showDeleteConfirm = $state(false);
+  let deletingRefName = $state("");
+  let showClearAllConfirm = $state(false);
+
   // Manual input fields
   let manualShape = $state("rectangle");
   let manualWidth = $state("13.29");
@@ -438,6 +443,7 @@
   function handleStartEdit(ref) {
     showAddForm = true;
     isEditing = true;
+    editingId = ref.id;       // ← kunci: simpan ID agar update tidak membuat baru
     useManualInput = true;
     useStream = false;
     imageFile = null;
@@ -445,27 +451,36 @@
     
     referenceName = ref.name;
     manualShape = ref.shape;
-    manualWidth = ref.widthMm.toString();
-    manualHeight = ref.heightMm.toString();
-    manualDiameter = ref.diameterMm.toString();
+    manualWidth = ref.widthMm?.toString() ?? "";
+    manualHeight = ref.heightMm?.toString() ?? "";
+    manualDiameter = ref.diameterMm?.toString() ?? "";
     manualTolerance = ref.toleranceMm.toString();
     manualVertices = ref.vertices.toString();
   }
 
   async function handleDelete(name) {
-    if (!confirm(`Delete reference "${name}"?`)) return;
+    deletingRefName = name;
+    showDeleteConfirm = true;
+  }
 
+  async function confirmDelete() {
+    if (!deletingRefName) return;
     try {
-      await deleteReference(name);
+      await deleteReference(deletingRefName);
       await loadReferences();
     } catch (err) {
       error = err.message;
+    } finally {
+      showDeleteConfirm = false;
+      deletingRefName = "";
     }
   }
 
   async function handleClearAll() {
-    if (!confirm("Delete ALL references? This cannot be undone!")) return;
+    showClearAllConfirm = true;
+  }
 
+  async function confirmClearAll() {
     try {
       await clearAllReferences();
       await loadReferences();
@@ -473,11 +488,13 @@
       setTimeout(() => (success = ""), 3000);
     } catch (err) {
       error = err.message;
+    } finally {
+      showClearAllConfirm = false;
     }
   }
 </script>
 
-<svelte:head><title>Reference Management â€” EPSON QC</title></svelte:head>
+<svelte:head><title>Reference Management – EPSON QC</title></svelte:head>
 
 <div class="page animate-fade-in">
   <!-- PAGE HEADER -->
@@ -628,8 +645,7 @@
                 <div class="ref-row">
                   <span class="ref-label">Tolerance:</span>
                   <span class="ref-value mono-tol"
-                    >Â±{ref.toleranceMm.toFixed(2)} mm</span
-                  >
+                    >±{ref.toleranceMm.toFixed(2)} mm</span>
                 </div>
 
                 <div class="ref-row">
@@ -645,7 +661,7 @@
                         "id-ID",
                       )}</span
                     >
-                    <span class="divider-dot">â€¢</span>
+                    <span class="divider-dot">•</span>
                     <Clock size={12} class="mr-1 text-dim" />
                     <span class="time-val"
                       >{new Date(ref.createdAt).toLocaleTimeString("id-ID", {
@@ -1020,7 +1036,113 @@
   </div>
 {/if}
 
+<!-- Delete Single Reference Confirmation Modal -->
+{#if showDeleteConfirm}
+  <div
+    class="modal-overlay animate-fade-in"
+    role="button"
+    tabindex="-1"
+    onclick={() => (showDeleteConfirm = false)}
+    onkeydown={(e) => e.key === 'Escape' && (showDeleteConfirm = false)}
+  >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="modal-card confirm-modal animate-scale-in" onclick={(e) => e.stopPropagation()}>
+      <div class="confirm-icon-wrap">
+        <Trash2 size={28} class="text-danger" />
+      </div>
+      <h3 class="confirm-title">Hapus Referensi?</h3>
+      <p class="confirm-desc">
+        Referensi <strong>"{deletingRefName}"</strong> akan dihapus permanen dan tidak dapat dikembalikan.
+      </p>
+      <div class="confirm-actions">
+        <button class="btn btn-secondary" onclick={() => (showDeleteConfirm = false)}>Batal</button>
+        <button class="btn btn-danger" onclick={confirmDelete} disabled={saving}>
+          {#if saving}
+            <span class="spinner"></span> Menghapus...
+          {:else}
+            <Trash2 size={14} class="inline-icon mr-1" /> Hapus
+          {/if}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Clear All References Confirmation Modal -->
+{#if showClearAllConfirm}
+  <div
+    class="modal-overlay animate-fade-in"
+    role="button"
+    tabindex="-1"
+    onclick={() => (showClearAllConfirm = false)}
+    onkeydown={(e) => e.key === 'Escape' && (showClearAllConfirm = false)}
+  >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="modal-card confirm-modal animate-scale-in" onclick={(e) => e.stopPropagation()}>
+      <div class="confirm-icon-wrap danger">
+        <AlertCircle size={28} class="text-danger" />
+      </div>
+      <h3 class="confirm-title">Hapus Semua Referensi?</h3>
+      <p class="confirm-desc">
+        Semua referensi akan dihapus permanen. Tindakan ini <strong>tidak dapat dibatalkan</strong>.
+      </p>
+      <div class="confirm-actions">
+        <button class="btn btn-secondary" onclick={() => (showClearAllConfirm = false)}>Batal</button>
+        <button class="btn btn-danger" onclick={confirmClearAll} disabled={saving}>
+          {#if saving}
+            <span class="spinner"></span> Menghapus...
+          {:else}
+            <AlertCircle size={14} class="inline-icon mr-1" /> Hapus Semua
+          {/if}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
+  /* Confirm Modal */
+  .confirm-modal {
+    max-width: 420px;
+    text-align: center;
+    padding: var(--sp-6);
+  }
+  .confirm-icon-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--clr-ng-bg);
+    border: 1px solid var(--clr-ng-border);
+    margin: 0 auto var(--sp-4);
+  }
+  .confirm-icon-wrap.danger {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+  :global(.text-danger) { color: var(--clr-ng) !important; }
+  .confirm-title {
+    font-size: var(--fs-xl);
+    font-weight: var(--fw-bold);
+    margin-bottom: var(--sp-2);
+    color: var(--clr-text);
+  }
+  .confirm-desc {
+    font-size: var(--fs-sm);
+    color: var(--clr-text-muted);
+    margin-bottom: var(--sp-5);
+    line-height: 1.5;
+  }
+  .confirm-actions {
+    display: flex;
+    gap: var(--sp-3);
+    justify-content: center;
+  }
+
   .page {
     max-width: 100%;
     height: 100%;
