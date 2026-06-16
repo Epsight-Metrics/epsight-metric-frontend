@@ -41,8 +41,22 @@
   let measurements = $state({});
   let deviations = $state({});
   let referenceMatched = $state("");
-  let selectedPartId = $state(null);
+  let selectedPartId = $state(
+    typeof localStorage !== "undefined"
+      ? parseInt(localStorage.getItem("operator_selected_part_id")) || null
+      : null
+  );
   let parts = $state([]);
+
+  $effect(() => {
+    if (typeof localStorage !== "undefined") {
+      if (selectedPartId) {
+        localStorage.setItem("operator_selected_part_id", selectedPartId.toString());
+      } else {
+        localStorage.removeItem("operator_selected_part_id");
+      }
+    }
+  });
 
   let recentInspections = $state([]);
   let todayInspected = $state(0);

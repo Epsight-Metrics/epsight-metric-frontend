@@ -1,4 +1,4 @@
-﻿<script>
+<script>
   import { onMount, onDestroy } from "svelte";
   import {
     getReferences,
@@ -26,6 +26,7 @@
     Camera,
     Smartphone,
     Scan,
+    Pencil,
   } from "@lucide/svelte";
 
   let loading = $state(true);
@@ -42,6 +43,8 @@
   let uploadProgress = $state("");
   let useStream = $state(false);
   let useManualInput = $state(false);
+  let isEditing = $state(false);
+  let editingId = $state(null);
 
   // Manual input fields
   let manualShape = $state("rectangle");
@@ -209,8 +212,8 @@
     if (!sourceElement) return;
 
     const canvas = document.createElement("canvas");
-    canvas.width = 1280;
-    canvas.height = 720;
+    canvas.width = 1920;   // Sama dengan resolusi kamera kalibrasi (config.json capture_width)
+    canvas.height = 1080;  // Sama dengan resolusi kamera kalibrasi (config.json capture_height)
     const ctx = canvas.getContext("2d");
 
     const width = sourceElement.videoWidth || sourceElement.naturalWidth || canvas.width;
@@ -357,8 +360,29 @@
     const tolerance = parseFloat(manualTolerance);
     const vertices = parseInt(manualVertices);
 
-    if (isNaN(tolerance) || isNaN(vertices)) {
-      error = "Please provide valid tolerance and vertices";
+    // Validasi sesuai shape
+    if (manualShape === "circle") {
+      if (isNaN(diameter) || diameter <= 0) {
+        error = "Diameter harus diisi dan lebih dari 0 untuk shape Circle";
+        return;
+      }
+    } else {
+      if (isNaN(width) || width <= 0) {
+        error = "Width harus diisi dan lebih dari 0";
+        return;
+      }
+      if (isNaN(height) || height <= 0) {
+        error = "Height harus diisi dan lebih dari 0";
+        return;
+      }
+    }
+
+    if (isNaN(tolerance) || tolerance < 0) {
+      error = "Tolerance harus diisi dan bernilai positif";
+      return;
+    }
+    if (isNaN(vertices) || vertices < 0) {
+      error = "Vertices harus diisi dan bernilai positif";
       return;
     }
 
@@ -368,13 +392,14 @@
 
     try {
       const payload = {
+        id: isEditing ? editingId : undefined,
         name: referenceName.trim(),
         shape: manualShape,
         vertices: vertices,
         toleranceMm: tolerance,
-        diameterMm: manualShape === "circle" ? diameter : 0,
-        widthMm: manualShape !== "circle" ? width : 0,
-        heightMm: manualShape !== "circle" ? height : 0,
+        diameterMm: manualShape === "circle" ? diameter : null,
+        widthMm: manualShape !== "circle" ? width : null,
+        heightMm: manualShape !== "circle" ? height : null,
       };
 
       console.log("Final payload being sent:", JSON.stringify(payload, null, 2));
@@ -387,6 +412,8 @@
       manualHeight = "6.29";
       manualTolerance = "1.00";
       manualVertices = "4";
+      editingId = null;
+      isEditing = false;
       uploadProgress = "";
       showAddForm = false;
 
@@ -396,11 +423,33 @@
       await loadReferences();
     } catch (err) {
       console.error("Save manual reference error:", err);
-      error = err.message || "Failed to save reference";
+      // ApiError dari client.js menyimpan errors array langsung
+      if (err.errors?.length) {
+        error = err.errors.map(e => e.message || e.msg).join(", ");
+      } else {
+        error = err.message || "Failed to save reference";
+      }
       uploadProgress = "";
     } finally {
       saving = false;
     }
+  }
+
+  function handleStartEdit(ref) {
+    showAddForm = true;
+    isEditing = true;
+    useManualInput = true;
+    useStream = false;
+    imageFile = null;
+    error = "";
+    
+    referenceName = ref.name;
+    manualShape = ref.shape;
+    manualWidth = ref.widthMm.toString();
+    manualHeight = ref.heightMm.toString();
+    manualDiameter = ref.diameterMm.toString();
+    manualTolerance = ref.toleranceMm.toString();
+    manualVertices = ref.vertices.toString();
   }
 
   async function handleDelete(name) {
@@ -446,6 +495,7 @@
         class="btn btn-primary btn-action"
         onclick={() => {
           showAddForm = true;
+          isEditing = false;
           imageFile = null;
           referenceName = "";
           useStream = false;
@@ -497,6 +547,7 @@
           class="btn btn-primary mt-4"
           onclick={() => {
             showAddForm = true;
+            isEditing = false;
             imageFile = null;
             referenceName = "";
             useStream = false;
@@ -524,12 +575,22 @@
                   {/if}
                   <h4 class="ref-name">{ref.name}</h4>
                 </div>
-                <button
-                  class="btn-icon btn-danger-compact"
-                  onclick={() => handleDelete(ref.name)}
-                >
-                  <Trash2 size={14} />
-                </button>
+                <div style="display: flex; gap: var(--sp-1);">
+                  <button
+                    class="btn-icon"
+                    onclick={() => handleStartEdit(ref)}
+                    title="Edit Referensi"
+                  >
+                    <Pencil size={14} class="text-primary" />
+                  </button>
+                  <button
+                    class="btn-icon btn-danger-compact"
+                    onclick={() => handleDelete(ref.name)}
+                    title="Hapus Referensi"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
 
               <div class="ref-details">
@@ -620,7 +681,7 @@
     >
       <div class="modal-header-bar">
         <h3 class="modal-title-text">
-          <Database class="inline-icon mr-2 text-primary" size={20} /> Add New Reference
+          <Database class="inline-icon mr-2 text-primary" size={20} /> {#if isEditing}Edit Reference{:else}Add New Reference{/if}
         </h3>
         <button class="modal-close" onclick={() => (showAddForm = false)}>
           <X size={20} />
@@ -647,46 +708,48 @@
           />
         </div>
 
-        <!-- Toggle between Upload, Stream, and Manual Input -->
-        <div class="source-toggle">
-          <button
-            class="toggle-btn"
-            class:active={!useStream && !useManualInput}
-            onclick={() => {
-              useStream = false;
-              useManualInput = false;
-              imageFile = null;
-            }}
-            disabled={saving}
-          >
-            <Upload size={14} class="mr-2" /> Upload Image
-          </button>
-          <button
-            class="toggle-btn"
-            class:active={useStream && !useManualInput}
-            onclick={() => {
-              useStream = true;
-              useManualInput = false;
-              imageFile = null;
-            }}
-            disabled={saving}
-          >
-            <Camera size={14} class="mr-2" /> Ambil dari Kamera
-          </button>
-          <button
-            class="toggle-btn"
-            class:active={useManualInput}
-            onclick={() => {
-              useManualInput = true;
-              useStream = false;
-              imageFile = null;
-              capturedImageModal = null;
-            }}
-            disabled={saving}
-          >
-            <Plus size={14} class="mr-2" /> Input Manual
-          </button>
-        </div>
+        {#if !isEditing}
+          <!-- Toggle between Upload, Stream, and Manual Input -->
+          <div class="source-toggle">
+            <button
+              class="toggle-btn"
+              class:active={!useStream && !useManualInput}
+              onclick={() => {
+                useStream = false;
+                useManualInput = false;
+                imageFile = null;
+              }}
+              disabled={saving}
+            >
+              <Upload size={14} class="mr-2" /> Upload Image
+            </button>
+            <button
+              class="toggle-btn"
+              class:active={useStream && !useManualInput}
+              onclick={() => {
+                useStream = true;
+                useManualInput = false;
+                imageFile = null;
+              }}
+              disabled={saving}
+            >
+              <Camera size={14} class="mr-2" /> Ambil dari Kamera
+            </button>
+            <button
+              class="toggle-btn"
+              class:active={useManualInput}
+              onclick={() => {
+                useManualInput = true;
+                useStream = false;
+                imageFile = null;
+                capturedImageModal = null;
+              }}
+              disabled={saving}
+            >
+              <Plus size={14} class="mr-2" /> Input Manual
+            </button>
+          </div>
+        {/if}
 
         {#if useManualInput}
           <!-- Manual Input Form -->
@@ -705,46 +768,61 @@
               </select>
             </div>
 
-            <div class="form-row">
-              <div class="form-group">
-                <label class="label" for="manualDiameter">Diameter (mm)</label>
-                <input
-                  class="input"
-                  id="manualDiameter"
-                  type="number"
-                  step="0.01"
-                  placeholder="10.00"
-                  bind:value={manualDiameter}
-                  disabled={saving || manualShape !== "circle"}
-                />
+            {#if manualShape === "circle"}
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="label" for="manualDiameter">Diameter (mm)</label>
+                  <input
+                    class="input"
+                    id="manualDiameter"
+                    type="number"
+                    step="0.01"
+                    placeholder="10.00"
+                    bind:value={manualDiameter}
+                    disabled={saving}
+                  />
+                </div>
+                <div class="form-group">
+                  <label class="label" for="manualTolerance">Tolerance (±mm)</label>
+                  <input
+                    class="input"
+                    id="manualTolerance"
+                    type="number"
+                    step="0.01"
+                    placeholder="1.00"
+                    bind:value={manualTolerance}
+                    disabled={saving}
+                  />
+                </div>
               </div>
-              <div class="form-group">
-                <label class="label" for="manualWidth">Width (mm)</label>
-                <input
-                  class="input"
-                  id="manualWidth"
-                  type="number"
-                  step="0.01"
-                  placeholder="13.29"
-                  bind:value={manualWidth}
-                  disabled={saving || manualShape === "circle"}
-                />
+            {:else}
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="label" for="manualWidth">Width (mm)</label>
+                  <input
+                    class="input"
+                    id="manualWidth"
+                    type="number"
+                    step="0.01"
+                    placeholder="13.29"
+                    bind:value={manualWidth}
+                    disabled={saving}
+                  />
+                </div>
+                <div class="form-group">
+                  <label class="label" for="manualHeight">Height (mm)</label>
+                  <input
+                    class="input"
+                    id="manualHeight"
+                    type="number"
+                    step="0.01"
+                    placeholder="6.29"
+                    bind:value={manualHeight}
+                    disabled={saving}
+                  />
+                </div>
               </div>
-            </div>
 
-            <div class="form-row">
-              <div class="form-group">
-                <label class="label" for="manualHeight">Height (mm)</label>
-                <input
-                  class="input"
-                  id="manualHeight"
-                  type="number"
-                  step="0.01"
-                  placeholder="6.29"
-                  bind:value={manualHeight}
-                  disabled={saving || manualShape === "circle"}
-                />
-              </div>
               <div class="form-group">
                 <label class="label" for="manualTolerance">Tolerance (±mm)</label>
                 <input
@@ -757,7 +835,7 @@
                   disabled={saving}
                 />
               </div>
-            </div>
+            {/if}
 
             <div class="form-group">
               <label class="label" for="manualVertices">Vertices</label>

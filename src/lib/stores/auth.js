@@ -131,7 +131,7 @@ function createAuthStore() {
             const mappedUser = {
               id: payload.id,
               username: payload.username,
-              fullname: cachedUser?.fullname || payload.username,
+              fullname: payload.name || payload.username,
               role: toFrontendRole(payload.role),
               backendRole: payload.role,
             };

@@ -2,7 +2,7 @@
   import Header from "$lib/components/shared/Header.svelte";
   import { t } from "$lib/i18n.js";
   import { page } from "$app/stores";
-  import { Camera, Sliders, X } from "@lucide/svelte";
+  import { Camera, Sliders, Database, X } from "@lucide/svelte";
 
   let { children } = $props();
 
@@ -11,6 +11,7 @@
     currentPath === "/operator" || currentPath === "/operator/",
   );
   let isCalibration = $derived(currentPath.includes("/calibration"));
+  let isReferences = $derived(currentPath.includes("/references"));
 
   let sidebarOpen = $state(false);
 
@@ -40,6 +41,13 @@
           class:active={isCalibration}
         >
           <Sliders size={16} /> Kalibrasi
+        </a>
+        <a
+          href="/operator/references"
+          class="nav-item"
+          class:active={isReferences}
+        >
+          <Database size={16} /> Referensi
         </a>
       </nav>
     {/snippet}
@@ -100,6 +108,14 @@
         onclick={closeSidebar}
       >
         <Sliders size={18} /> <span>Kalibrasi</span>
+      </a>
+      <a
+        href="/operator/references"
+        class="sidebar-nav-item"
+        class:active={isReferences}
+        onclick={closeSidebar}
+      >
+        <Database size={18} /> <span>Referensi</span>
       </a>
     </nav>
   </aside>
