@@ -274,9 +274,9 @@
         name: ref.name,
         shape: ref.shape,
         vertices: ref.vertices,
-        diameterMm: ref.diameter_mm,
-        widthMm: ref.width_mm,
-        heightMm: ref.height_mm,
+        diameterMm: ref.shape === "circle" ? ref.diameter_mm : null,
+        widthMm: ref.shape !== "circle" ? ref.width_mm : null,
+        heightMm: ref.shape !== "circle" ? ref.height_mm : null,
         toleranceMm: ref.tolerance_mm,
       });
 
@@ -330,9 +330,9 @@
         name: ref.name,
         shape: ref.shape,
         vertices: ref.vertices,
-        diameterMm: ref.diameter_mm,
-        widthMm: ref.width_mm,
-        heightMm: ref.height_mm,
+        diameterMm: ref.shape === "circle" ? ref.diameter_mm : null,
+        widthMm: ref.shape !== "circle" ? ref.width_mm : null,
+        heightMm: ref.shape !== "circle" ? ref.height_mm : null,
         toleranceMm: ref.tolerance_mm,
       });
 

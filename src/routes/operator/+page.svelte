@@ -37,6 +37,7 @@
   let inspecting = $state(false);
   let hasResult = $state(false);
   let resultStatus = $state("");
+  let resultShape = $state("");
   let showNgOverlay = $state(false);
   let manualInspectionId = $state(null); // Track manual inspection ID
 
@@ -82,9 +83,33 @@
   let capturedImage = $state(null);
   let onlineProcessing = $state(false);
   let availableCameras = $state([]);
-  let selectedCamera = $state("");
-  let useIpCamera = $state(false);
-  let ipCameraUrl = $state("http://192.168.1.100:8080/video");
+  let selectedCamera = $state(
+    typeof localStorage !== "undefined"
+      ? localStorage.getItem("operator_selected_camera") || ""
+      : ""
+  );
+  let useIpCamera = $state(
+    typeof localStorage !== "undefined"
+      ? localStorage.getItem("operator_use_ip_camera") === "true"
+      : false
+  );
+  let ipCameraUrl = $state(
+    typeof localStorage !== "undefined"
+      ? localStorage.getItem("operator_ip_camera_url") || "http://192.168.1.100:8080/video"
+      : "http://192.168.1.100:8080/video"
+  );
+
+  $effect(() => {
+    if (typeof localStorage !== "undefined") {
+      if (selectedCamera) {
+        localStorage.setItem("operator_selected_camera", selectedCamera);
+      }
+      localStorage.setItem("operator_use_ip_camera", useIpCamera.toString());
+      if (ipCameraUrl) {
+        localStorage.setItem("operator_ip_camera_url", ipCameraUrl);
+      }
+    }
+  });
 
   // Detail modal state
   let showDetailModal = $state(false);
@@ -299,7 +324,14 @@
         (device) => device.kind === "videoinput",
       );
       if (availableCameras.length > 0) {
-        selectedCamera = availableCameras[availableCameras.length - 1].deviceId; // Default to last camera (usually USB)
+        const savedCamera = typeof localStorage !== "undefined" ? localStorage.getItem("operator_selected_camera") : null;
+        const cameraExists = availableCameras.some(c => c.deviceId === savedCamera);
+        
+        if (savedCamera && cameraExists) {
+          selectedCamera = savedCamera;
+        } else {
+          selectedCamera = availableCameras[availableCameras.length - 1].deviceId; // Default to last camera (usually USB)
+        }
         await startCamera(); // Auto start camera
       }
     } catch (err) {
@@ -505,6 +537,7 @@
         } else {
           resultStatus = mapped.status;
         }
+        resultShape = data.shape || "";
         hasResult = true;
         inspecting = false;
       }
@@ -950,53 +983,6 @@
         <div class="section-label">{$t("operator.result")}</div>
 
         {#if hasResult}
-          <!-- Reference Info (jika ada) -->
-          {#if referenceMatched}
-            <div class="reference-info animate-fade-in">
-              <div class="ref-badge">
-                <Database size={14} /> Reference:
-                <strong>{referenceMatched}</strong>
-              </div>
-            </div>
-          {/if}
-
-          <div class="measurements animate-fade-in">
-            {#each Object.entries(measurements) as [key, val]}
-              {@const deviation = deviations[key]}
-              {@const hasDeviation =
-                deviation !== undefined && deviation !== null}
-              {@const isOverTolerance =
-                hasDeviation && Math.abs(deviation) > 0.1}
-
-              <div
-                class="measure-row"
-                class:has-deviation={hasDeviation}
-                class:over-tolerance={isOverTolerance}
-              >
-                <span class="measure-label">{key}</span>
-                <div class="measure-values">
-                  <span class="measure-value">{val} mm</span>
-                  {#if hasDeviation}
-                    <span
-                      class="deviation"
-                      class:negative={deviation < 0}
-                      class:positive={deviation > 0}
-                    >
-                      ({deviation > 0 ? "+" : ""}{deviation} mm)
-                    </span>
-                  {/if}
-                </div>
-                <span class="measure-check" class:warning={isOverTolerance}>
-                  {#if isOverTolerance}
-                    <AlertTriangle size={16} />
-                  {:else}
-                    <Check size={16} />
-                  {/if}
-                </span>
-              </div>
-            {/each}
-          </div>
-
           <div
             class="status-card animate-fade-in"
             class:ok={resultStatus === "OK"}
@@ -1013,6 +999,55 @@
               {/if}
             </span>
             <span class="status-text">STATUS: {resultStatus}</span>
+          </div>
+
+          <!-- Reference Info (jika ada) -->
+          {#if referenceMatched}
+            <div class="reference-info animate-fade-in">
+              <div class="ref-badge">
+                <Database size={14} /> Reference:
+                <strong>{referenceMatched}</strong>
+              </div>
+            </div>
+          {/if}
+
+          <div class="measurements animate-fade-in">
+            {#each Object.entries(measurements) as [key, val]}
+              {#if (resultShape === "circle" && !key.toLowerCase().includes("width") && !key.toLowerCase().includes("height")) || (resultShape !== "circle" && !key.toLowerCase().includes("diameter"))}
+                {@const deviation = deviations[key]}
+                {@const hasDeviation =
+                  deviation !== undefined && deviation !== null}
+                {@const isOverTolerance =
+                  hasDeviation && Math.abs(deviation) > 0.1}
+
+                <div
+                  class="measure-row"
+                  class:has-deviation={hasDeviation}
+                  class:over-tolerance={isOverTolerance}
+                >
+                  <span class="measure-label">{key}</span>
+                  <div class="measure-values">
+                    <span class="measure-value">{val} mm</span>
+                    {#if hasDeviation}
+                      <span
+                        class="deviation"
+                        class:negative={deviation < 0}
+                        class:positive={deviation > 0}
+                      >
+                        ({deviation > 0 ? "+" : ""}{deviation} mm)
+                      </span>
+                    {/if}
+                  </div>
+                  <span class="measure-check" class:warning={isOverTolerance}>
+                    {#if isOverTolerance}
+                      <AlertTriangle size={16} />
+                    {:else}
+                      <Check size={16} />
+                    {/if}
+                  </span>
+                </div>
+              {/if}
+            {/each}
           </div>
         {/if}
 
