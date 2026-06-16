@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from "svelte";
-  import { getCalibration, saveCalibration } from "$lib/api/engineer.js";
+  import { getCalibration, saveCalibration } from "$lib/api/calibration.js";
   import { cache } from "$lib/stores/cache.js";
   import { isAuthenticated } from "$lib/stores/auth.js";
   import {
@@ -439,7 +439,7 @@
               CV program mengambil konfigurasi ini saat startup melalui:
             </p>
             <code class="endpoint-compact"
-              >GET /api/engineer/calibration/public</code
+              >GET /api/operator/calibration/public</code
             >
           </div>
         </div>

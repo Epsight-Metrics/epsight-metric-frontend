@@ -139,7 +139,7 @@ const translations = {
   'auditor.verified': 'Terverifikasi',
   'auditor.export_csv': 'Export CSV',
   'auditor.export_pdf': 'Export PDF',
-  'auditor.print': 'ðŸ–¨ Cetak',
+  'auditor.print': 'Cetak',
   'auditor.total_records': 'Total Rekaman',
   'auditor.integrity_rate': 'Integritas Terverifikasi',
 

@@ -203,7 +203,6 @@
       "ADMIN",
       "QUALITY_MANAGER",
       "AUDIT",
-      "ENGINEER",
     ];
     if (!allowedBackendRoles.includes(newUser.role)) {
       error = "Role tidak valid.";
@@ -261,7 +260,6 @@
       "ADMIN",
       "QUALITY_MANAGER",
       "AUDIT",
-      "ENGINEER",
     ];
     if (!allowedBackendRoles.includes(editingUser.role)) {
       error = "Role tidak valid.";

@@ -45,3 +45,28 @@ export async function getParts() {
 export async function submitCvInspection(data) {
   return api.post('/operator/inspect/cv', data);
 }
+
+/**
+ * Get details of a single inspection.
+ * @param {number} id
+ */
+export async function getInspectionDetail(id) {
+  return api.get(`/operator/inspections/${id}`);
+}
+
+/**
+ * Trigger CV inspection via server SSE broadcast.
+ * @param {string} sessionId
+ */
+export async function triggerCv(sessionId) {
+  return api.post('/operator/trigger-cv', { sessionId });
+}
+
+/**
+ * Submit an online inspection with captured photo (FormData).
+ * @param {FormData} formData - Contains image, partId, sessionId
+ */
+export async function inspectOnline(formData) {
+  return api.post('/operator/inspect/online', formData);
+}
+

@@ -21,9 +21,12 @@
     stopSession,
     submitInspection,
     getParts,
+    triggerCv,
+    inspectOnline,
   } from "$lib/api/operator.js";
   import { connectSSE } from "$lib/api/notifications.js";
   import { getToken } from "$lib/api/client.js";
+  import InspectionDetailModal from "$lib/components/operator/InspectionDetailModal.svelte";
 
 
   // Session state
@@ -84,9 +87,8 @@
   let ipCameraUrl = $state("http://192.168.1.100:8080/video");
 
   // Detail modal state
-  let selectedInspection = $state(null);
   let showDetailModal = $state(false);
-  let loadingDetail = $state(false);
+  let selectedInspectionId = $state(null);
 
   // Derived state untuk status CV online/offline
   let cvOnline = $derived(cvLastSeen && Date.now() - cvLastSeen < 60_000);
@@ -232,82 +234,13 @@
   }
 
   function openDetailModal(inspection) {
-    selectedInspection = inspection;
+    selectedInspectionId = inspection.id;
     showDetailModal = true;
-
-    // ALWAYS fetch detail untuk memastikan data lengkap
-    console.log("[DEBUG] Opening modal for inspection:", inspection);
-    fetchInspectionDetail(inspection.id);
-  }
-
-  async function fetchInspectionDetail(inspectionId) {
-    loadingDetail = true;
-    console.log("[DEBUG] Fetching detail for inspection ID:", inspectionId);
-
-    try {
-      const API_BASE = import.meta.env.VITE_API_URL
-        ? `${import.meta.env.VITE_API_URL}/api`
-        : "/api";
-
-      const res = await fetch(
-        `${API_BASE}/operator/inspections/${inspectionId}`,
-        {
-          credentials: "include",
-          headers: {
-            Authorization: `Bearer ${getToken()}`,
-          },
-        },
-      );
-
-      console.log("[DEBUG] Response status:", res.status);
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("[DEBUG] Error response:", errorText);
-        throw new Error("Failed to fetch detail");
-      }
-
-      const data = await res.json();
-      console.log("[DEBUG] Received data:", data);
-
-      const inspection = data.inspection || data;
-      console.log("[DEBUG] Inspection object:", inspection);
-      console.log("[DEBUG] nilaiDimensi:", inspection.nilaiDimensi);
-      console.log("[DEBUG] matchedRef:", inspection.matchedRef);
-
-      // Update selectedInspection dengan data lengkap
-      selectedInspection = {
-        ...selectedInspection,
-        dimensions: flattenDimensions(inspection.nilaiDimensi || {}),
-        matchedRef: inspection.matchedRef || selectedInspection.matchedRef,
-        shape: inspection.shape || selectedInspection.shape,
-        timestamp: inspection.timestamp || selectedInspection.timestamp,
-      };
-
-      console.log("[DEBUG] Updated selectedInspection:", selectedInspection);
-
-      // Update recentInspections juga
-      recentInspections = recentInspections.map((item) =>
-        item.id === inspectionId
-          ? {
-              ...item,
-              dimensions: flattenDimensions(inspection.nilaiDimensi || item.dimensions),
-              matchedRef: inspection.matchedRef || item.matchedRef,
-              shape: inspection.shape || item.shape,
-            }
-          : item,
-      );
-    } catch (err) {
-      console.error("[DEBUG] Failed to fetch inspection detail:", err);
-      error = "Gagal memuat detail inspeksi";
-    } finally {
-      loadingDetail = false;
-    }
   }
 
   function closeDetailModal() {
     showDetailModal = false;
-    setTimeout(() => (selectedInspection = null), 300);
+    setTimeout(() => { selectedInspectionId = null; }, 300);
   }
 
   async function handleStartSession() {
@@ -348,24 +281,7 @@
     error = "";
 
     try {
-      // Kirim command ke backend untuk trigger CV
-      const response = await fetch("/api/operator/trigger-cv", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          sessionId: activeSession.sessionId,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to trigger CV inspection");
-      }
-
-      // Hasil akan datang via SSE (inspection-update event)
-      // UI sudah handle di onMount → connectSSE
+      await triggerCv(activeSession.sessionId);
     } catch (err) {
       error = err.message;
       inspecting = false;
@@ -489,30 +405,7 @@
       formData.append("partId", selectedPartId);
       formData.append("sessionId", activeSession.sessionId);
 
-      const API_BASE = import.meta.env.VITE_API_URL
-        ? `${import.meta.env.VITE_API_URL}/api`
-        : "/api";
-
-      const apiResponse = await fetch(`${API_BASE}/operator/inspect/online`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
-        },
-        body: formData,
-      });
-
-      if (!apiResponse.ok) {
-        const errorData = await apiResponse.json();
-        const errDetail = errorData.error
-          ? typeof errorData.error === "string"
-            ? errorData.error
-            : JSON.stringify(errorData.error)
-          : "";
-        throw new Error(
-          `${errorData.message || "Inspeksi gagal"} ${errDetail}`,
-        );
-      }
+      await inspectOnline(formData);
 
       // Reset state
       capturedImage = null;
@@ -632,245 +525,11 @@
   <title>{$t("operator.live_camera")} - EPSON QC</title>
 </svelte:head>
 
-<!-- Detail Modal -->
-{#if showDetailModal && selectedInspection}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="modal-overlay" onclick={closeDetailModal} role="presentation">
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <div
-      class="modal-card"
-      onclick={(e) => e.stopPropagation()}
-      onkeydown={(e) => e.stopPropagation()}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="modal-title"
-      tabindex="-1"
-    >
-      <div class="modal-header">
-        <div>
-          <h3 id="modal-title">Detail Inspeksi #{selectedInspection.id}</h3>
-          <p class="modal-subtitle">
-            {selectedInspection.partName} ({selectedInspection.part})
-          </p>
-        </div>
-        <button
-          class="modal-close"
-          onclick={closeDetailModal}
-          aria-label="Tutup modal"
-        >
-          <svg
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
-
-      <div class="modal-body">
-        {#if loadingDetail}
-          <div class="loading-detail">
-            <span class="spinner"></span>
-            <p>Memuat detail inspeksi...</p>
-          </div>
-        {:else}
-          {@const statusText = (!selectedInspection.matchedRef || selectedInspection.matchedRef === "-" || selectedInspection.matchedRef === "No matched reference") ? "NO REF" : selectedInspection.status}
-          <div
-            class="detail-status"
-            class:ok={statusText === "OK"}
-            class:ng={statusText === "NG"}
-            class:noref={statusText === "NO REF"}
-          >
-            {#if statusText === "OK"}
-              <CheckCircle size={32} />
-            {:else if statusText === "NO REF"}
-              <AlertTriangle size={32} />
-            {:else}
-              <XCircle size={32} />
-            {/if}
-            <span>{statusText}</span>
-          </div>
-
-          <div class="detail-meta">
-            <div class="meta-item">
-              <span class="meta-label">Waktu:</span>
-              <span class="meta-value"
-                >{new Date(selectedInspection.timestamp).toLocaleString(
-                  "id-ID",
-                )}</span
-              >
-            </div>
-            <div class="meta-item">
-              <span class="meta-label">Shape:</span>
-              <span class="meta-value">{selectedInspection.shape || "-"}</span>
-            </div>
-            <div class="meta-item">
-              <span class="meta-label">Reference:</span>
-              <span class="meta-value"
-                >{selectedInspection.matchedRef || "-"}</span
-              >
-            </div>
-          </div>
-
-          <div class="measurements-table">
-            <div class="table-header">
-              <span class="col-dimension">Dimensi</span>
-              <span class="col-actual">Aktual (mm)</span>
-              <span class="col-reference">Reference (mm)</span>
-              <span class="col-deviation">Deviasi (mm)</span>
-            </div>
-
-            {#if selectedInspection.dimensions.diameter_mm !== undefined}
-              <div
-                class="table-row"
-                class:deviation-alert={Math.abs(
-                  selectedInspection.dimensions.deviation_diameter_mm || 0,
-                ) > 0.5}
-              >
-                <span class="col-dimension">Diameter</span>
-                <span class="col-actual"
-                  >{selectedInspection.dimensions.diameter_mm?.toFixed(2) ||
-                    "-"}</span
-                >
-                <span class="col-reference"
-                  >{selectedInspection.dimensions.reference_diameter_mm?.toFixed(
-                    2,
-                  ) || "-"}</span
-                >
-                <span
-                  class="col-deviation"
-                  class:positive={(selectedInspection.dimensions
-                    .deviation_diameter_mm || 0) > 0}
-                >
-                  {selectedInspection.dimensions.deviation_diameter_mm !==
-                  undefined
-                    ? (selectedInspection.dimensions.deviation_diameter_mm >= 0
-                        ? "+"
-                        : "") +
-                      selectedInspection.dimensions.deviation_diameter_mm.toFixed(
-                        2,
-                      )
-                    : "-"}
-                </span>
-              </div>
-            {/if}
-
-            {#if selectedInspection.dimensions.width_mm !== undefined}
-              <div
-                class="table-row"
-                class:deviation-alert={Math.abs(
-                  selectedInspection.dimensions.deviation_width_mm || 0,
-                ) > 0.5}
-              >
-                <span class="col-dimension">Width</span>
-                <span class="col-actual"
-                  >{selectedInspection.dimensions.width_mm?.toFixed(2) ||
-                    "-"}</span
-                >
-                <span class="col-reference"
-                  >{selectedInspection.dimensions.reference_width_mm?.toFixed(
-                    2,
-                  ) || "-"}</span
-                >
-                <span
-                  class="col-deviation"
-                  class:positive={(selectedInspection.dimensions
-                    .deviation_width_mm || 0) > 0}
-                >
-                  {selectedInspection.dimensions.deviation_width_mm !==
-                  undefined
-                    ? (selectedInspection.dimensions.deviation_width_mm >= 0
-                        ? "+"
-                        : "") +
-                      selectedInspection.dimensions.deviation_width_mm.toFixed(
-                        2,
-                      )
-                    : "-"}
-                </span>
-              </div>
-            {/if}
-
-            {#if selectedInspection.dimensions.height_mm !== undefined}
-              <div
-                class="table-row"
-                class:deviation-alert={Math.abs(
-                  selectedInspection.dimensions.deviation_height_mm || 0,
-                ) > 0.5}
-              >
-                <span class="col-dimension">Height</span>
-                <span class="col-actual"
-                  >{selectedInspection.dimensions.height_mm?.toFixed(2) ||
-                    "-"}</span
-                >
-                <span class="col-reference"
-                  >{selectedInspection.dimensions.reference_height_mm?.toFixed(
-                    2,
-                  ) || "-"}</span
-                >
-                <span
-                  class="col-deviation"
-                  class:positive={(selectedInspection.dimensions
-                    .deviation_height_mm || 0) > 0}
-                >
-                  {selectedInspection.dimensions.deviation_height_mm !==
-                  undefined
-                    ? (selectedInspection.dimensions.deviation_height_mm >= 0
-                        ? "+"
-                        : "") +
-                      selectedInspection.dimensions.deviation_height_mm.toFixed(
-                        2,
-                      )
-                    : "-"}
-                </span>
-              </div>
-            {/if}
-
-            {#if selectedInspection.dimensions.area_mm2 !== undefined}
-              <div class="table-row">
-                <span class="col-dimension">Area</span>
-                <span class="col-actual"
-                  >{selectedInspection.dimensions.area_mm2?.toFixed(2) ||
-                    "-"}</span
-                >
-                <span class="col-reference">-</span>
-                <span class="col-deviation">-</span>
-              </div>
-            {/if}
-
-            {#if selectedInspection.dimensions.perimeter_mm !== undefined}
-              <div class="table-row">
-                <span class="col-dimension">Perimeter</span>
-                <span class="col-actual"
-                  >{selectedInspection.dimensions.perimeter_mm?.toFixed(2) ||
-                    "-"}</span
-                >
-                <span class="col-reference">-</span>
-                <span class="col-deviation">-</span>
-              </div>
-            {/if}
-          </div>
-
-          {#if selectedInspection.dimensions.within_tolerance !== undefined}
-            <div
-              class="tolerance-badge"
-              class:within={selectedInspection.dimensions.within_tolerance}
-            >
-              {selectedInspection.dimensions.within_tolerance
-                ? "✓ Dalam Toleransi"
-                : "⚠ Di Luar Toleransi"}
-            </div>
-          {/if}
-        {/if}
-      </div>
-    </div>
-  </div>
-{/if}
+<InspectionDetailModal
+  show={showDetailModal}
+  inspectionId={selectedInspectionId}
+  onClose={closeDetailModal}
+/>
 
 <!-- NG Full-screen overlay -->
 {#if showNgOverlay}
