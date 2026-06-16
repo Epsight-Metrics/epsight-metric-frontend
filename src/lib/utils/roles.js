@@ -1,10 +1,9 @@
-﻿// Role mapping between backend enums and frontend shorthand
+// Role mapping between backend enums and frontend shorthand
 const BACKEND_TO_FRONTEND = {
   OPERATOR_QC: 'operator',
   QUALITY_MANAGER: 'manager',
   AUDIT: 'auditor',
   ADMIN: 'admin',
-  ENGINEER: 'engineer',
 };
 
 const FRONTEND_TO_BACKEND = {
@@ -12,7 +11,6 @@ const FRONTEND_TO_BACKEND = {
   manager: 'QUALITY_MANAGER',
   auditor: 'AUDIT',
   admin: 'ADMIN',
-  engineer: 'ENGINEER',
 };
 
 /**
@@ -42,6 +40,5 @@ export function getAllBackendRoles() {
     { value: 'QUALITY_MANAGER', label: 'QC Manager' },
     { value: 'AUDIT', label: 'Auditor' },
     { value: 'ADMIN', label: 'Admin' },
-    { value: 'ENGINEER', label: 'Engineer' },
   ];
 }

@@ -4,7 +4,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
 
-  const SAFE_PATHS = ['/operator', '/admin', '/manager', '/auditor', '/engineer', '/login'];
+  const SAFE_PATHS = ['/operator', '/admin', '/manager', '/auditor', '/login'];
 
   onMount(() => {
     const unsub = isAuthenticated.subscribe(val => {

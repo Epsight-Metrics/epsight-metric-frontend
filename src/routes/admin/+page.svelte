@@ -201,8 +201,8 @@
     const allowedBackendRoles = [
       "OPERATOR_QC",
       "ADMIN",
-      "MANAGER_QC",
-      "AUDITOR",
+      "QUALITY_MANAGER",
+      "AUDIT",
       "ENGINEER",
     ];
     if (!allowedBackendRoles.includes(newUser.role)) {
@@ -259,8 +259,8 @@
     const allowedBackendRoles = [
       "OPERATOR_QC",
       "ADMIN",
-      "MANAGER_QC",
-      "AUDITOR",
+      "QUALITY_MANAGER",
+      "AUDIT",
       "ENGINEER",
     ];
     if (!allowedBackendRoles.includes(editingUser.role)) {
