@@ -1013,7 +1013,7 @@
 
           <div class="measurements animate-fade-in">
             {#each Object.entries(measurements) as [key, val]}
-              {#if (resultShape === "circle" && !key.toLowerCase().includes("width") && !key.toLowerCase().includes("height")) || (resultShape !== "circle" && !key.toLowerCase().includes("diameter"))}
+              {#if !key.toLowerCase().includes("contour") && ((resultShape === "circle" && !key.toLowerCase().includes("width") && !key.toLowerCase().includes("height")) || (resultShape !== "circle" && !key.toLowerCase().includes("diameter")))}
                 {@const deviation = deviations[key]}
                 {@const hasDeviation =
                   deviation !== undefined && deviation !== null}
