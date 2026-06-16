@@ -173,7 +173,7 @@
               <span class="col-deviation">Deviasi (mm)</span>
             </div>
 
-            {#if dimensions.diameter_mm !== undefined}
+            {#if inspection.shape === "circle" && dimensions.diameter_mm !== undefined}
               <div
                 class="table-row"
                 class:deviation-alert={Math.abs(
@@ -202,7 +202,7 @@
               </div>
             {/if}
 
-            {#if dimensions.width_mm !== undefined}
+            {#if inspection.shape !== "circle" && dimensions.width_mm !== undefined}
               <div
                 class="table-row"
                 class:deviation-alert={Math.abs(
@@ -231,7 +231,7 @@
               </div>
             {/if}
 
-            {#if dimensions.height_mm !== undefined}
+            {#if inspection.shape !== "circle" && dimensions.height_mm !== undefined}
               <div
                 class="table-row"
                 class:deviation-alert={Math.abs(

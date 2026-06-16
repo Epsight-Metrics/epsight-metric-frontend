@@ -117,6 +117,7 @@
         imagePath: item.imagePath,
         idPart: item.idPart,
         matchedRef: item.matchedRef,
+        shape: item.shape || item.nilaiDimensi?.shape || '-',
       }));
       history = mapped;
       total = result.total || 0;
@@ -272,8 +273,7 @@
     return '-';
   }
 
-  // Parse actual, reference, and deviations for detailed display
-  function parseDetailedDimensions(dimensions) {
+  function parseDetailedDimensions(dimensions, shape) {
     if (!dimensions) return [];
 
     const items = [];
@@ -307,7 +307,14 @@
       const references = dimensions.references || {};
 
       Object.entries(measurements).forEach(([key, actVal]) => {
-        if (['contour', 'bbox', 'rot_box', 'center', 'shape', 'vertices'].some(dk => key.toLowerCase().includes(dk))) {
+        const lowerKey = key.toLowerCase();
+        if (['contour', 'bbox', 'rot_box', 'center', 'shape', 'vertices'].some(dk => lowerKey.includes(dk))) {
+          return;
+        }
+        if (shape === "circle" && (lowerKey.includes("width") || lowerKey.includes("height"))) {
+          return;
+        }
+        if (shape !== "circle" && lowerKey.includes("diameter")) {
           return;
         }
 
@@ -339,6 +346,12 @@
           lowerKey.startsWith('deviation_') ||
           ['contour', 'bbox', 'rot_box', 'center', 'shape', 'vertices', 'measurements', 'deviations', 'references', 'cvdetail', 'referencematched'].some(dk => lowerKey.includes(dk))
         ) {
+          return;
+        }
+        if (shape === "circle" && (lowerKey.includes("width") || lowerKey.includes("height"))) {
+          return;
+        }
+        if (shape !== "circle" && lowerKey.includes("diameter")) {
           return;
         }
 
@@ -539,7 +552,7 @@
 
 <!-- Detail Modal -->
 {#if showDetailModal && selectedInspection}
-  {@const parsedDims = parseDetailedDimensions(selectedInspection.dimensions)}
+  {@const parsedDims = parseDetailedDimensions(selectedInspection.dimensions, selectedInspection.shape)}
   <div 
     class="modal-backdrop" 
     role="button" 
