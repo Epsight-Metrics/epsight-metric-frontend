@@ -24,7 +24,7 @@
   } from "$lib/api/operator.js";
   import { connectSSE } from "$lib/api/notifications.js";
   import { getToken } from "$lib/api/client.js";
-  import { getReferences } from "$lib/api/reference.js";
+
 
   // Session state
   let activeSession = $state(null);
@@ -41,10 +41,23 @@
   let measurements = $state({});
   let deviations = $state({});
   let referenceMatched = $state("");
-  let selectedPartId = $state(null);
+  let selectedPartId = $state(
+    typeof localStorage !== "undefined"
+      ? parseInt(localStorage.getItem("operator_selected_part_id")) || null
+      : null
+  );
   let parts = $state([]);
-  let references = $state([]);
-  let selectedRefName = $state("");
+
+  $effect(() => {
+    if (typeof localStorage !== "undefined") {
+      if (selectedPartId) {
+        localStorage.setItem("operator_selected_part_id", selectedPartId.toString());
+      } else {
+        localStorage.removeItem("operator_selected_part_id");
+      }
+    }
+  });
+
   let recentInspections = $state([]);
   let todayInspected = $state(0);
   let todayNg = $state(0);
@@ -82,7 +95,9 @@
   async function fetchDetections() {
     try {
       const CV_API_URL =
-        import.meta.env.VITE_CV_API_URL || "https://epsight-metric-mainprogram-production.up.railway.app";
+        typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+          ? "http://localhost:8000"
+          : (import.meta.env.VITE_CV_API_URL || "https://epsight-metric-mainprogram-production.up.railway.app");
       const res = await fetch(`${CV_API_URL}/detections`);
       if (res.ok) {
         const data = await res.json();
@@ -123,14 +138,12 @@
     pageLoading = true;
     error = "";
     try {
-      const [sessionData, partsData, refsData] = await Promise.all([
+      const [sessionData, partsData] = await Promise.all([
         getSession(),
         getParts(),
-        getReferences(),
       ]);
 
       parts = partsData || [];
-      references = refsData?.references || [];
 
       activeSession = sessionData.activeSession || null;
       const initialInspections = (sessionData.recent || []).map(mapInspection);
@@ -298,8 +311,8 @@
   }
 
   async function handleStartSession() {
-    if (!selectedPartId || !selectedRefName) {
-      error = "Silakan pilih Part dan Referensi terlebih dahulu sebelum memulai sesi.";
+    if (!selectedPartId) {
+      error = "Silakan pilih Part terlebih dahulu sebelum memulai sesi.";
       return;
     }
     sessionLoading = true;
@@ -322,7 +335,6 @@
       await stopSession(activeSession.sessionId);
       activeSession = null;
       selectedPartId = null;
-      selectedRefName = "";
     } catch (err) {
       error = err.message;
     } finally {
@@ -476,8 +488,6 @@
       formData.append("image", imageBlob, "inspection.jpg");
       formData.append("partId", selectedPartId);
       formData.append("sessionId", activeSession.sessionId);
-
-      formData.append("referenceName", selectedRefName);
 
       const API_BASE = import.meta.env.VITE_API_URL
         ? `${import.meta.env.VITE_API_URL}/api`
@@ -942,9 +952,9 @@
             >{$t("operator.select_part")}</label
           >
           <select id="partSelect" class="select-custom" bind:value={selectedPartId}>
-            <option value={null} disabled selected>— Pilih Part —</option>
+            <option value={null} disabled selected>- Pilih Part -</option>
             {#each parts as part}
-              <option value={part.id}>{part.partCode} — {part.partName}</option>
+              <option value={part.id}>{part.partCode} - {part.partName}</option>
             {/each}
           </select>
           {#if selectedPartId}
@@ -956,19 +966,7 @@
             {/if}
           {/if}
         </div>
-        <div class="part-selector">
-          <label class="label" for="refSelect">Referensi</label>
-          <select id="refSelect" class="select-custom" bind:value={selectedRefName}>
-            <option value="" disabled selected>— Pilih Referensi —</option>
-            {#if references.length === 0}
-              <option value="">— Belum ada referensi —</option>
-            {:else}
-              {#each references as ref}
-                <option value={ref.name}>{ref.name} ({ref.shape})</option>
-              {/each}
-            {/if}
-          </select>
-        </div>
+
       </div>
     </div>
 
@@ -2238,7 +2236,7 @@
     border-color: var(--clr-accent);
   }
 
-  /* Online Header Row — stacked layout */
+  /* Online Header Row - stacked layout */
   .online-header-row {
     display: flex;
     flex-direction: column;
