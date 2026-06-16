@@ -8,7 +8,7 @@
     saveReferenceFromImage,
     saveReferenceFromStream,
   } from "$lib/api/reference.js";
-  import { getCalibration } from "$lib/api/engineer.js";
+  import { getCalibration } from "$lib/api/calibration.js";
   import { connectSSE } from "$lib/api/notifications.js";
   import { isAuthenticated } from "$lib/stores/auth.js";
   import {

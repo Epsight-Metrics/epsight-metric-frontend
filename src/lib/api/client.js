@@ -35,6 +35,16 @@ export class ApiError extends Error {
 }
 
 /**
+ * Helper to unwrap success wrapper from standardized API responses.
+ */
+function unwrapResponse(obj) {
+  if (obj && typeof obj === 'object' && obj.success === true && 'data' in obj) {
+    return obj.data;
+  }
+  return obj;
+}
+
+/**
  * Core fetch wrapper with automatic auth headers and error handling.
  * @param {string} endpoint - API path (e.g., '/auth/login')
  * @param {object} options - Fetch options
@@ -45,10 +55,14 @@ export async function apiFetch(endpoint, options = {}) {
   const token = getToken();
 
   const headers = {
-    'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
     ...options.headers,
   };
+
+  // Only add Content-Type: json if body is not FormData
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -90,9 +104,10 @@ export async function apiFetch(endpoint, options = {}) {
             credentials: 'include',
           }).then(async (res) => {
             const data = await res.json().catch(() => null);
-            if (res.ok && data?.accessToken) {
-              setToken(data.accessToken);
-              return data.accessToken;
+            const unwrapped = unwrapResponse(data);
+            if (res.ok && unwrapped?.accessToken) {
+              setToken(unwrapped.accessToken);
+              return unwrapped.accessToken;
             }
             throw new Error('Refresh failed');
           }).finally(() => {
@@ -112,12 +127,13 @@ export async function apiFetch(endpoint, options = {}) {
         }
 
         const retryData = await retryRes.json().catch(() => null);
-        if (retryRes.ok) return retryData;
+        if (retryRes.ok) return unwrapResponse(retryData);
 
+        const unwrappedRetry = unwrapResponse(retryData);
         throw new ApiError(
-          retryData?.message || `Permintaan gagal (${retryRes.status})`,
+          unwrappedRetry?.message || `Permintaan gagal (${retryRes.status})`,
           retryRes.status,
-          retryData?.errors || null
+          unwrappedRetry?.errors || null
         );
       } catch (err) {
         // Clear session on refresh failure
@@ -140,15 +156,40 @@ export async function apiFetch(endpoint, options = {}) {
       }
     }
 
+    const unwrappedData = unwrapResponse(data);
     throw new ApiError(
-      data?.message || `Permintaan gagal (${response.status})`,
+      unwrappedData?.message || `Permintaan gagal (${response.status})`,
       response.status,
-      data?.errors || null
+      unwrappedData?.errors || null
     );
   }
 
-  return data;
+  return unwrapResponse(data);
 }
+
+// Convenience methods
+export const api = {
+  get: (endpoint, params, options) => apiFetch(`${endpoint}${buildQuery(params)}`, options),
+
+  post: (endpoint, body, options) =>
+    apiFetch(endpoint, {
+      method: 'POST',
+      body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined),
+      ...options,
+    }),
+
+  put: (endpoint, body, options) =>
+    apiFetch(endpoint, {
+      method: 'PUT',
+      body: body instanceof FormData ? body : JSON.stringify(body),
+      ...options,
+    }),
+
+  delete: (endpoint, params, options) =>
+    apiFetch(`${endpoint}${buildQuery(params)}`, { method: 'DELETE', ...options }),
+
+  download: (endpoint, params, options) => apiFetch(`${endpoint}${buildQuery(params)}`, options),
+};
 
 /**
  * Build a query string from an object, omitting null/undefined/empty values.
@@ -161,27 +202,3 @@ function buildQuery(params) {
   if (filtered.length === 0) return '';
   return '?' + new URLSearchParams(filtered).toString();
 }
-
-// Convenience methods
-export const api = {
-  get: (endpoint, params, options) => apiFetch(`${endpoint}${buildQuery(params)}`, options),
-
-  post: (endpoint, body, options) =>
-    apiFetch(endpoint, {
-      method: 'POST',
-      body: body ? JSON.stringify(body) : undefined,
-      ...options,
-    }),
-
-  put: (endpoint, body, options) =>
-    apiFetch(endpoint, {
-      method: 'PUT',
-      body: JSON.stringify(body),
-      ...options,
-    }),
-
-  delete: (endpoint, params, options) =>
-    apiFetch(`${endpoint}${buildQuery(params)}`, { method: 'DELETE', ...options }),
-
-  download: (endpoint, params, options) => apiFetch(`${endpoint}${buildQuery(params)}`, options),
-};

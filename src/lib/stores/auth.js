@@ -4,6 +4,41 @@ import { login as apiLogin, logout as apiLogout } from '$lib/api/auth.js';
 import { toFrontendRole } from '$lib/utils/roles.js';
 
 /**
+ * Obfuscates a value and saves it to localStorage.
+ */
+function setSecureItem(key, value) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const str = JSON.stringify(value);
+    const encoded = btoa(unescape(encodeURIComponent(str)));
+    localStorage.setItem(key, encoded);
+  } catch (e) {
+    console.error('Failed to save secure item:', e);
+  }
+}
+
+/**
+ * Reads and decodes an obfuscated value from localStorage.
+ */
+function getSecureItem(key) {
+  if (typeof localStorage === 'undefined') return null;
+  const encoded = localStorage.getItem(key);
+  if (!encoded) return null;
+  try {
+    const decoded = decodeURIComponent(escape(atob(encoded)));
+    return JSON.parse(decoded);
+  } catch {
+    // Fallback parsing for backward compatibility in case it's stored as plain JSON
+    try {
+      return JSON.parse(encoded);
+    } catch {
+      localStorage.removeItem(key);
+      return null;
+    }
+  }
+}
+
+/**
  * Lightweight helper to decode JWT payload securely on the client side.
  */
 function parseJwt(token) {
@@ -54,9 +89,7 @@ function createAuthStore() {
         const { setToken } = await import('$lib/api/client.js');
         setToken(accessToken);
 
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem('srs_user', JSON.stringify(mappedUser));
-        }
+        setSecureItem('srs_user', mappedUser);
 
         set({ user: mappedUser, isAuthenticated: true, loading: false, error: null });
         return mappedUser;
@@ -99,19 +132,10 @@ function createAuthStore() {
      * but immediately validates session authenticity against backend JWT tokens.
      */
     restore: async () => {
-      let cachedUser = null;
-
       // 1. Progressive rendering using client-side cache
-      if (typeof localStorage !== 'undefined') {
-        const stored = localStorage.getItem('srs_user');
-        if (stored) {
-          try {
-            cachedUser = JSON.parse(stored);
-            set({ user: cachedUser, isAuthenticated: true, loading: false, error: null });
-          } catch {
-            localStorage.removeItem('srs_user');
-          }
-        }
+      const cachedUser = getSecureItem('srs_user');
+      if (cachedUser) {
+        set({ user: cachedUser, isAuthenticated: true, loading: false, error: null });
       }
 
       // 2. Strict cryptographically verified background reconciliation
@@ -137,9 +161,7 @@ function createAuthStore() {
             };
 
             // Write absolute verified details to local cache, overriding any manual tampering
-            if (typeof localStorage !== 'undefined') {
-              localStorage.setItem('srs_user', JSON.stringify(mappedUser));
-            }
+            setSecureItem('srs_user', mappedUser);
             set({ user: mappedUser, isAuthenticated: true, loading: false, error: null });
             return mappedUser;
           }
