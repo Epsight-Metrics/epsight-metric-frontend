@@ -164,7 +164,7 @@
       const params = { page, limit };
       if (searchQuery) params.name = searchQuery;
       const result = await getUsers(params);
-      users = result.data || [];
+      users = result.users || [];
       total = result.total || 0;
     } catch (err) {
       error = err.message;

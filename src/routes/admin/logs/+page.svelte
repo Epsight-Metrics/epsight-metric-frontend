@@ -33,7 +33,7 @@
         params.dateTo = `${dateTo}T23:59:59`;
       }
       const result = await getLogs(params);
-      logs = (result.data || []).map(log => ({
+      logs = (result.logs || []).map(log => ({
         id: log.id,
         userId: log.userId,
         user: log.user?.username || log.userId,
